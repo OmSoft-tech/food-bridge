@@ -4,15 +4,18 @@ import { formatCoverage, formatKg, formatTime } from '../lib/format'
 import type { MatchPlan, Transfer } from '../lib/matching'
 import type { HistoryAction, HistoryEntry } from '../lib/journal'
 import type { UncoveredSummary } from '../lib/uncovered'
+import type { PickupDay } from '../lib/schedule'
 import { downloadCsv, planCsvFilename, transfersToCsv } from '../lib/csv'
 import { Badge } from './ui'
 import UncoveredNeeds from './UncoveredNeeds'
+import PickupSchedule from './PickupSchedule'
 
 interface Props {
   plan: MatchPlan | null
   confirmed: Set<string>
   history: HistoryEntry[]
   uncovered: UncoveredSummary | null
+  schedule: PickupDay[] | null
   onBuild: () => void
   onReset: () => void
   onConfirm: (transferId: string) => void
@@ -29,6 +32,7 @@ export default function MatchingScreen({
   confirmed,
   history,
   uncovered,
+  schedule,
   onBuild,
   onReset,
   onConfirm,
@@ -156,6 +160,8 @@ export default function MatchingScreen({
               )
             })}
           </div>
+
+          <PickupSchedule schedule={schedule} />
 
           {uncovered && <UncoveredNeeds summary={uncovered} />}
         </>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { needs, products, recipients, stores, surpluses } from './data'
 import { buildMatchPlan, type MatchPlan } from './lib/matching'
 import { computeUncovered } from './lib/uncovered'
+import { planPickupSchedule } from './lib/schedule'
 import { formatKg } from './lib/format'
 import { loadJournal, HISTORY_KEY, HISTORY_LIMIT, type HistoryAction, type HistoryEntry } from './lib/journal'
 import Dashboard from './components/Dashboard'
@@ -108,6 +109,11 @@ export default function App() {
     () => (plan ? computeUncovered(products, needs, plan) : null),
     [plan],
   )
+  // План вывозов на неделю: дни по срокам годности + маршруты по расстоянию.
+  const schedule = useMemo(
+    () => (plan ? planPickupSchedule(plan, surpluses, stores, recipients, confirmedIds) : null),
+    [plan, confirmedIds],
+  )
 
   useEffect(() => {
     try {
@@ -194,6 +200,7 @@ export default function App() {
             confirmed={confirmedIds}
             history={history}
             uncovered={uncovered}
+            schedule={schedule}
             onBuild={handleBuild}
             onReset={handleReset}
             onConfirm={handleConfirm}

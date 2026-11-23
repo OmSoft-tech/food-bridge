@@ -607,6 +607,38 @@ body {
   color: var(--green);
 }
 
+/* ── План вывозов на неделю ────────────────────────────────────────── */
+
+.pickup-day {
+  padding: 12px 0;
+  border-bottom: 1px dashed var(--border-soft);
+}
+
+.pickup-day:last-child {
+  border-bottom: none;
+}
+
+.pickup-day > .card__row {
+  margin-bottom: 8px;
+}
+
+.pickup-route {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 4px 0 4px 12px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.pickup-route .progress-label {
+  flex-shrink: 0;
+}
+
+.pickup-chain {
+  color: var(--text);
+}
+
 /* ── Футер ─────────────────────────────────────────────────────────── */
 
 .footer {
