@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { products, recipients, stores } from '../data'
 import { formatCoverage, formatKg, formatTime } from '../lib/format'
 import type { MatchPlan, Transfer } from '../lib/matching'
@@ -29,9 +30,9 @@ export default function MatchingScreen({
   onConfirm,
   onLog,
 }: Props) {
-  const storeById = new Map(stores.map((s) => [s.id, s]))
-  const recipientById = new Map(recipients.map((r) => [r.id, r]))
-  const productById = new Map(products.map((p) => [p.id, p]))
+  const storeById = useMemo(() => new Map(stores.map((s) => [s.id, s])), [])
+  const recipientById = useMemo(() => new Map(recipients.map((r) => [r.id, r])), [])
+  const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [])
 
   return (
     <section>

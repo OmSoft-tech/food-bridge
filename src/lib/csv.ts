@@ -7,7 +7,9 @@ const CSV_SEP = ';'
 /** Значение CSV: экранирование «;», кавычек и переносов строк. */
 export function csvField(value: string | number): string {
   const s = String(value)
-  return /[;"\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  // Защита от formula injection: Excel исполняет ячейки, начинающиеся с = + - @.
+  const guarded = /^[=+@-]/.test(s) ? `'${s}` : s
+  return /[;"\r\n]/.test(guarded) ? `"${guarded.replace(/"/g, '""')}"` : guarded
 }
 
 /** Строка CSV из значений. */

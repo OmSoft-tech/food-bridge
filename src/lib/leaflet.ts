@@ -5,6 +5,11 @@
  */
 
 const LEAFLET_VERSION = '1.9.4'
+/** SRI-хэши unpkg: защита от подмены файлов CDN. */
+const LEAFLET_SRI = {
+  css: 'sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H',
+  js: 'sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH',
+}
 
 let leafletPromise: Promise<void> | null = null
 
@@ -20,10 +25,14 @@ export function loadLeaflet(): Promise<void> {
     const link = document.createElement('link')
     link.rel = 'stylesheet'
     link.href = `https://unpkg.com/leaflet@${LEAFLET_VERSION}/dist/leaflet.css`
+    link.integrity = LEAFLET_SRI.css
+    link.crossOrigin = 'anonymous'
     document.head.appendChild(link)
 
     const script = document.createElement('script')
     script.src = `https://unpkg.com/leaflet@${LEAFLET_VERSION}/dist/leaflet.js`
+    script.integrity = LEAFLET_SRI.js
+    script.crossOrigin = 'anonymous'
     script.async = true
     script.onload = () => resolve()
     script.onerror = () => {

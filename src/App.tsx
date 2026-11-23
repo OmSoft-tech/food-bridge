@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { needs, products, recipients, stores, surpluses } from './data'
 import { buildMatchPlan, type MatchPlan } from './lib/matching'
 import { formatKg } from './lib/format'
-import { loadJournal, type HistoryAction, type HistoryEntry } from './lib/journal'
+import { loadJournal, HISTORY_KEY, HISTORY_LIMIT, type HistoryAction, type HistoryEntry } from './lib/journal'
 import Dashboard from './components/Dashboard'
 import SurplusScreen from './components/SurplusScreen'
 import NeedsScreen from './components/NeedsScreen'
@@ -75,9 +75,6 @@ function useTabFromUrl(): [TabId, (t: TabId) => void] {
 /* ── Подтверждения и журнал: localStorage ──────────────────────────── */
 
 const CONFIRMED_KEY = 'food-bridge.confirmed.v1'
-const HISTORY_KEY = 'food-bridge.history.v1'
-/** Лимит журнала: полноценный журнал оператора, не только последние действия. */
-const HISTORY_LIMIT = 200
 
 function loadConfirmed(): Set<string> {
   try {
@@ -122,8 +119,8 @@ export default function App() {
     }
   }, [history])
 
-  const storeById = new Map(stores.map((s) => [s.id, s]))
-  const recipientById = new Map(recipients.map((r) => [r.id, r]))
+  const storeById = useMemo(() => new Map(stores.map((s) => [s.id, s])), [])
+  const recipientById = useMemo(() => new Map(recipients.map((r) => [r.id, r])), [])
 
   /** Запись значимого действия оператора в журнал. */
   const logHistory = (action: HistoryAction, label: string) =>
