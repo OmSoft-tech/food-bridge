@@ -54,7 +54,7 @@ describe('transfersToCsv — каркас', () => {
     id: 't1',
     storeId: 's1',
     recipientId: 'r1',
-    items: [{ productId: 'p1', surplusId: 'sv1', qty: 10 }],
+    items: [{ productId: 'p1', surplusId: 'sv1', qty: 10, needId: 'n1' }],
     totalKg: 10,
     personDays: 20,
     status: 'planned',

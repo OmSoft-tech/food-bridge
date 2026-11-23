@@ -651,6 +651,12 @@ body {
   color: var(--green);
 }
 
+.form-error {
+  color: var(--red);
+  font-size: 13px;
+  margin: 8px 0 0;
+}
+
 /* ── План вывозов на неделю ────────────────────────────────────────── */
 
 .pickup-day {
