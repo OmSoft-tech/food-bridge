@@ -1,16 +1,11 @@
 import { useMemo, useState } from 'react'
 import { products } from '../data'
 import { CATEGORIES, CATEGORY_LABEL, KCAL_PER_KG, NORM_KG_PER_PERSON_DAY } from '../lib/nutrition'
+import { computeBasket, basketsForBudget, type BasketItem } from '../lib/basket'
 import { formatCoverage, formatKcal, formatKg, formatMoney, formatNumber } from '../lib/format'
-import type { Category } from '../types'
 
-interface CalcItem {
-  productId: string
-  qty: number
-}
-
-/** Условный «средний набор» — быстрый старт для демо и жюри. */
-const PRESET: CalcItem[] = [
+/** Условный «средний набор» — быстрый старт для демо и жюри. Экспортируется для тестов. */
+export const PRESET: BasketItem[] = [
   { productId: 'p04', qty: 40 }, // молоко 2,5%
   { productId: 'p10', qty: 20 }, // гречка
   { productId: 'p26', qty: 15 }, // тушёнка
@@ -27,7 +22,7 @@ const PRESET_BUDGET = '20000'
  * с примером набора в бюджете, как после кнопки «Пример набора».
  */
 export default function CalculatorScreen({ initialDemo = false }: { initialDemo?: boolean }) {
-  const [items, setItems] = useState<CalcItem[]>(() =>
+  const [items, setItems] = useState<BasketItem[]>(() =>
     initialDemo ? PRESET.map((p) => ({ ...p })) : [],
   )
   const [productId, setProductId] = useState(products[0].id)
@@ -50,27 +45,11 @@ export default function CalculatorScreen({ initialDemo = false }: { initialDemo?
 
   const remove = (id: string) => setItems((prev) => prev.filter((i) => i.productId !== id))
 
-  const kgByCategory = new Map<Category, number>()
-  let totalKg = 0
-  let totalKcal = 0
-  let totalCost = 0
-  for (const item of items) {
-    const product = productById.get(item.productId)
-    if (!product) continue
-    const kg = item.qty * product.unitWeightKg
-    totalKg += kg
-    totalKcal += kg * KCAL_PER_KG[product.category]
-    totalCost += item.qty * product.price
-    kgByCategory.set(product.category, (kgByCategory.get(product.category) ?? 0) + kg)
-  }
-  let personDays = 0
-  for (const [category, kg] of kgByCategory) {
-    personDays += kg / NORM_KG_PER_PERSON_DAY[category]
-  }
+  const { totalKg, totalKcal, totalCost, personDays, kgByCategory } = computeBasket(products, items)
 
   const budgetValue = Number(budget.replace(/\s/g, '').replace(',', '.'))
   const budgetSet = budget.trim() !== '' && Number.isFinite(budgetValue) && budgetValue > 0
-  const baskets = budgetSet && totalCost > 0 ? Math.floor(budgetValue / totalCost) : null
+  const baskets = budgetSet ? basketsForBudget(budgetValue, totalCost) : null
   const costPerDay =
     budgetSet && totalCost > 0 && personDays > 0 ? totalCost / personDays : null
 
