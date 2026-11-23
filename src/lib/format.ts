@@ -12,6 +12,10 @@ export function formatKcal(kcal: number): string {
   return `${formatNumber(kcal)} ккал`
 }
 
+export function formatMoney(rub: number): string {
+  return `${formatNumber(rub)} ₽`
+}
+
 const dayMs = 86_400_000
 
 /** Дата истечения срока годности излишка. */

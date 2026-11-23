@@ -12,6 +12,10 @@ export interface Product {
   unitWeightKg: number
   /** срок хранения товара, дней */
   shelfLifeDays: number
+  /** розничная цена единицы, ₽ (реалистичные цены X5) */
+  price: number
+  /** цена за кг, ₽ (производное: price / unitWeightKg) */
+  pricePerKg: number
 }
 
 export type SurplusStatus = 'available' | 'reserved' | 'transferred'

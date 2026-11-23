@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { products } from '../data'
 import { CATEGORIES, CATEGORY_LABEL, KCAL_PER_KG, NORM_KG_PER_PERSON_DAY } from '../lib/nutrition'
-import { formatCoverage, formatKcal, formatKg, formatNumber } from '../lib/format'
+import { formatCoverage, formatKcal, formatKg, formatMoney, formatNumber } from '../lib/format'
 import type { Category } from '../types'
 
 interface CalcItem {
@@ -19,10 +19,14 @@ const PRESET: CalcItem[] = [
   { productId: 'p21', qty: 15 }, // яблоки
 ]
 
+/** Демо-бюджет для «Пример набора», чтобы сразу показать бюджетные тайлы. */
+const PRESET_BUDGET = '20000'
+
 export default function CalculatorScreen() {
   const [items, setItems] = useState<CalcItem[]>([])
   const [productId, setProductId] = useState(products[0].id)
   const [qty, setQty] = useState('10')
+  const [budget, setBudget] = useState('')
 
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [])
 
@@ -32,9 +36,7 @@ export default function CalculatorScreen() {
     setItems((prev) => {
       const existing = prev.find((i) => i.productId === productId)
       if (existing) {
-        return prev.map((i) =>
-          i.productId === productId ? { ...i, qty: i.qty + n } : i,
-        )
+        return prev.map((i) => (i.productId === productId ? { ...i, qty: i.qty + n } : i))
       }
       return [...prev, { productId, qty: n }]
     })
@@ -45,28 +47,34 @@ export default function CalculatorScreen() {
   const kgByCategory = new Map<Category, number>()
   let totalKg = 0
   let totalKcal = 0
+  let totalCost = 0
   for (const item of items) {
     const product = productById.get(item.productId)
     if (!product) continue
     const kg = item.qty * product.unitWeightKg
     totalKg += kg
     totalKcal += kg * KCAL_PER_KG[product.category]
-    kgByCategory.set(
-      product.category,
-      (kgByCategory.get(product.category) ?? 0) + kg,
-    )
+    totalCost += item.qty * product.price
+    kgByCategory.set(product.category, (kgByCategory.get(product.category) ?? 0) + kg)
   }
   let personDays = 0
   for (const [category, kg] of kgByCategory) {
     personDays += kg / NORM_KG_PER_PERSON_DAY[category]
   }
 
+  const budgetValue = Number(budget.replace(/\s/g, '').replace(',', '.'))
+  const budgetSet = budget.trim() !== '' && Number.isFinite(budgetValue) && budgetValue > 0
+  const baskets = budgetSet && totalCost > 0 ? Math.floor(budgetValue / totalCost) : null
+  const costPerDay =
+    budgetSet && totalCost > 0 && personDays > 0 ? totalCost / personDays : null
+
   return (
     <section>
       <h1 className="section-title">Калькулятор покрытия</h1>
       <p className="section-sub">
-        Бюджет условный: соберите набор товаров и посмотрите по нормам «человеко-дня», на сколько
-        людей и на сколько дней его хватит. Расчёт не привязан к ценам.
+        Соберите набор товаров и посмотрите по нормам «человеко-дня», на сколько людей и на сколько
+        дней его хватит. Цены — реалистичные розничные X5; задайте бюджет, чтобы увидеть, сколько
+        наборов в него влезает.
       </p>
 
       <div className="toolbar">
@@ -77,7 +85,7 @@ export default function CalculatorScreen() {
           <select id="calc-product" value={productId} onChange={(e) => setProductId(e.target.value)}>
             {products.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name} ({CATEGORY_LABEL[p.category]})
+                {p.name} ({CATEGORY_LABEL[p.category]} · {p.price} ₽/{p.unit})
               </option>
             ))}
           </select>
@@ -96,29 +104,52 @@ export default function CalculatorScreen() {
             onChange={(e) => setQty(e.target.value)}
           />
         </div>
+        <div className="field">
+          <label className="field__label" htmlFor="calc-budget">
+            Бюджет, ₽
+          </label>
+          <input
+            id="calc-budget"
+            type="number"
+            inputMode="numeric"
+            min="0"
+            step="any"
+            placeholder="не задан"
+            value={budget}
+            onChange={(e) => setBudget(e.target.value)}
+          />
+        </div>
         <button type="button" className="btn btn--primary" onClick={add}>
           Добавить
         </button>
         <button
           type="button"
           className="btn btn--ghost"
-          onClick={() => setItems(PRESET.map((p) => ({ ...p })))}
+          onClick={() => {
+            setItems(PRESET.map((p) => ({ ...p })))
+            setBudget(PRESET_BUDGET)
+          }}
         >
           Пример набора
         </button>
-        <button type="button" className="btn btn--ghost" onClick={() => setItems([])} disabled={items.length === 0}>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          onClick={() => setItems([])}
+          disabled={items.length === 0}
+        >
           Очистить
         </button>
       </div>
 
       {items.length === 0 ? (
         <div className="empty">
-          Добавьте позиции или нажмите «Пример набора» — увидите вес, калорийность и покрытие
-          «X человек на Y дней».
+          Добавьте позиции или нажмите «Пример набора» — увидите вес, калорийность, стоимость и
+          покрытие «X человек на Y дней».
         </div>
       ) : (
         <>
-          <div className="tiles" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+          <div className="tiles">
             <div className="tile">
               <div className="tile__value">{formatKg(totalKg)}</div>
               <div className="tile__label">Суммарный вес</div>
@@ -133,6 +164,30 @@ export default function CalculatorScreen() {
                 Покроет {formatNumber(personDays)} человеко-дней по нормам
               </div>
             </div>
+            <div className="tile">
+              <div className="tile__value">{formatMoney(totalCost)}</div>
+              <div className="tile__label">Стоимость набора</div>
+            </div>
+            {baskets !== null && (
+              <div className="tile">
+                <div className="tile__value">
+                  {baskets > 0 ? `${baskets} наб.` : '0 наборов'}
+                </div>
+                <div className="tile__label">Влезает в бюджет {formatMoney(budgetValue)}</div>
+                <div className="tile__hint">
+                  {baskets > 0
+                    ? `останется ${formatMoney(budgetValue - baskets * totalCost)}`
+                    : `не хватает ${formatMoney(totalCost - budgetValue)}`}
+                </div>
+              </div>
+            )}
+            {costPerDay !== null && (
+              <div className="tile">
+                <div className="tile__value">{formatMoney(costPerDay)}</div>
+                <div className="tile__label">Цена человеко-дня</div>
+                <div className="tile__hint">стоимость набора ÷ человеко-дни</div>
+              </div>
+            )}
           </div>
 
           <div className="breakdown">
@@ -173,7 +228,8 @@ export default function CalculatorScreen() {
                   <li className="list__item" key={item.productId}>
                     <span>{product.name}</span>
                     <span>
-                      {item.qty} {product.unit} · {formatKg(item.qty * product.unitWeightKg)}
+                      {item.qty} {product.unit} · {formatKg(item.qty * product.unitWeightKg)} ·{' '}
+                      {formatMoney(item.qty * product.price)}
                       <button
                         type="button"
                         className="btn btn--small btn--ghost"
