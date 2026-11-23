@@ -6,9 +6,10 @@ import Dashboard from './components/Dashboard'
 import SurplusScreen from './components/SurplusScreen'
 import NeedsScreen from './components/NeedsScreen'
 import MatchingScreen from './components/MatchingScreen'
+import MapScreen from './components/MapScreen'
 import CalculatorScreen from './components/CalculatorScreen'
 
-export type TabId = 'dashboard' | 'surpluses' | 'needs' | 'matching' | 'calc'
+export type TabId = 'dashboard' | 'surpluses' | 'needs' | 'matching' | 'calc' | 'map'
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Дашборд', icon: '📊' },
@@ -16,6 +17,7 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'needs', label: 'Нужды', icon: '🤝' },
   { id: 'matching', label: 'Мэтчинг', icon: '🔁' },
   { id: 'calc', label: 'Калькулятор', icon: '🧮' },
+  { id: 'map', label: 'Карта', icon: '🗺️' },
 ]
 
 const isTabId = (v: string): v is TabId => TABS.some((t) => t.id === v)
@@ -34,7 +36,14 @@ function parseLaunchParams(): LaunchParams {
   const sp = new URLSearchParams(window.location.search)
   const raw = sp.get('tab') ?? window.location.hash.replace(/^#/, '')
   const tab = raw && isTabId(raw) ? raw : 'dashboard'
-  return { tab, runDemo: sp.get('run') === 'demo' && (tab === 'matching' || tab === 'calc') }
+  // run=demo: план строится сразу на мэтчинге; calc подставляет набор;
+  // map показывает карту с готовым планом
+  return {
+    tab,
+    runDemo:
+      sp.get('run') === 'demo' &&
+      (tab === 'matching' || tab === 'calc' || tab === 'map'),
+  }
 }
 
 /** Вкладка живёт в URL (?tab=…) — ссылки шарябельные, back/forward синхронен. */
@@ -114,9 +123,9 @@ export default function App() {
   const [tab, selectTab] = useTabFromUrl()
   const [confirmedIds, setConfirmedIds] = useState<Set<string>>(loadConfirmed)
   // План строится на старте, если есть подтверждения в localStorage (id передач
-  // детерминированы) или если открыли демо-ссылку run=demo на мэтчинге.
+  // детерминированы) или если открыли демо-ссылку run=demo (мэтчинг/карта).
   const [plan, setPlan] = useState<MatchPlan | null>(() => {
-    if ((launch.runDemo && launch.tab === 'matching') || confirmedIds.size > 0) {
+    if ((launch.runDemo && (launch.tab === 'matching' || launch.tab === 'map')) || confirmedIds.size > 0) {
       return buildMatchPlan(products, surpluses, needs)
     }
     return null
@@ -213,6 +222,7 @@ export default function App() {
           />
         )}
         {tab === 'calc' && <CalculatorScreen initialDemo={launch.runDemo && launch.tab === 'calc'} />}
+        {tab === 'map' && <MapScreen plan={plan} confirmed={confirmedIds} />}
       </main>
 
       <footer className="footer">
