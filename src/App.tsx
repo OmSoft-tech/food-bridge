@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'react'
+import { needs, products, surpluses } from './data'
+import { buildMatchPlan, type MatchPlan } from './lib/matching'
+import Dashboard from './components/Dashboard'
+import SurplusScreen from './components/SurplusScreen'
+import NeedsScreen from './components/NeedsScreen'
+import MatchingScreen from './components/MatchingScreen'
+import CalculatorScreen from './components/CalculatorScreen'
 
 export type TabId = 'dashboard' | 'surplus' | 'needs' | 'matching' | 'calculator'
 
-export const TABS: { id: TabId; label: string; icon: string }[] = [
+const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Дашборд', icon: '📊' },
   { id: 'surplus', label: 'Излишки', icon: '🛒' },
   { id: 'needs', label: 'Нужды', icon: '🤝' },
@@ -30,6 +37,21 @@ function useHashTab(): [TabId, (t: TabId) => void] {
 
 export default function App() {
   const [tab, selectTab] = useHashTab()
+  const [plan, setPlan] = useState<MatchPlan | null>(null)
+
+  const handleBuild = () => setPlan(buildMatchPlan(products, surpluses, needs))
+  const handleReset = () => setPlan(null)
+  const handleConfirm = (transferId: string) =>
+    setPlan((prev) =>
+      prev
+        ? {
+            ...prev,
+            transfers: prev.transfers.map((t) =>
+              t.id === transferId ? { ...t, status: 'confirmed' as const } : t,
+            ),
+          }
+        : prev,
+    )
 
   return (
     <div className="app">
@@ -61,7 +83,13 @@ export default function App() {
       </header>
 
       <main className="main">
-        <div className="empty">Экран «{TABS.find((t) => t.id === tab)?.label}» — в разработке.</div>
+        {tab === 'dashboard' && <Dashboard />}
+        {tab === 'surplus' && <SurplusScreen />}
+        {tab === 'needs' && <NeedsScreen plan={plan} />}
+        {tab === 'matching' && (
+          <MatchingScreen plan={plan} onBuild={handleBuild} onReset={handleReset} onConfirm={handleConfirm} />
+        )}
+        {tab === 'calculator' && <CalculatorScreen />}
       </main>
 
       <footer className="footer">
