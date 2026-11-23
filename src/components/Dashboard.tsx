@@ -3,14 +3,18 @@ import { computeDashboardStats, type CategoryStat } from '../lib/stats'
 import { formatCoverage, formatKg, formatNumber } from '../lib/format'
 import { CATEGORY_LABEL, kgToPersonDays } from '../lib/nutrition'
 import type { MatchPlan } from '../lib/matching'
+import type { UncoveredSummary } from '../lib/uncovered'
 import { Bar, StatTile } from './ui'
+import UncoveredNeeds from './UncoveredNeeds'
 
 export default function Dashboard({
   plan,
   confirmed,
+  uncovered,
 }: {
   plan: MatchPlan | null
   confirmed: Set<string>
+  uncovered: UncoveredSummary | null
 }) {
   const stats = computeDashboardStats(products, surpluses, needs)
   const maxKg = Math.max(1, ...stats.categories.map((c) => c.availableKg))
@@ -95,6 +99,8 @@ export default function Dashboard({
             )
           })}
       </div>
+
+      {uncovered && <UncoveredNeeds summary={uncovered} />}
     </section>
   )
 }

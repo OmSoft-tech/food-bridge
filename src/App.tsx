@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { needs, products, recipients, stores, surpluses } from './data'
 import { buildMatchPlan, type MatchPlan } from './lib/matching'
+import { computeUncovered } from './lib/uncovered'
 import { formatKg } from './lib/format'
 import { loadJournal, HISTORY_KEY, HISTORY_LIMIT, type HistoryAction, type HistoryEntry } from './lib/journal'
 import Dashboard from './components/Dashboard'
@@ -102,6 +103,11 @@ export default function App() {
     return null
   })
   const [history, setHistory] = useState<HistoryEntry[]>(loadJournal)
+  // Непокрытые нужды и стоимость докупки — пересчитываются вместе с планом.
+  const uncovered = useMemo(
+    () => (plan ? computeUncovered(products, needs, plan) : null),
+    [plan],
+  )
 
   useEffect(() => {
     try {
@@ -179,7 +185,7 @@ export default function App() {
       </header>
 
       <main className="main">
-        {tab === 'dashboard' && <Dashboard plan={plan} confirmed={confirmedIds} />}
+        {tab === 'dashboard' && <Dashboard plan={plan} confirmed={confirmedIds} uncovered={uncovered} />}
         {tab === 'surpluses' && <SurplusScreen />}
         {tab === 'needs' && <NeedsScreen plan={plan} confirmed={confirmedIds} />}
         {tab === 'matching' && (
@@ -187,6 +193,7 @@ export default function App() {
             plan={plan}
             confirmed={confirmedIds}
             history={history}
+            uncovered={uncovered}
             onBuild={handleBuild}
             onReset={handleReset}
             onConfirm={handleConfirm}

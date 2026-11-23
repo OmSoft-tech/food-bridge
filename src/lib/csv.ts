@@ -1,6 +1,8 @@
 import type { Product, Recipient, Store } from '../types'
 import type { Transfer } from './matching'
 import { actionLabel, type HistoryEntry } from './journal'
+import type { UncoveredSummary } from './uncovered'
+import { PRIORITY_LABEL } from './nutrition'
 
 const CSV_SEP = ';'
 
@@ -28,12 +30,15 @@ export function transfersToCsv({
   products,
   stores,
   recipients,
+  uncovered,
 }: {
   transfers: Transfer[]
   confirmed: Set<string>
   products: Product[]
   stores: Store[]
   recipients: Recipient[]
+  /** блок «Докупить за счёт Фонда» в конце файла */
+  uncovered?: UncoveredSummary
 }): string {
   const productById = new Map(products.map((p) => [p.id, p]))
   const storeById = new Map(stores.map((s) => [s.id, s]))
@@ -82,6 +87,44 @@ export function transfersToCsv({
     lines.push(
       row([...common, 'ИТОГО по передаче', '', '', t.totalKg.toLocaleString('ru-RU', { maximumFractionDigits: 1 }), coverage, status]),
     )
+  }
+
+
+  if (uncovered && uncovered.items.length > 0) {
+    lines.push('')
+    lines.push('Докупить за счёт Фонда')
+    lines.push(
+      row(['Пункт помощи', 'Адрес', 'Товар', 'Кол-во', 'Ед.', 'Вес, кг', 'Приоритет', 'Стоимость, ₽']),
+    )
+    for (const item of uncovered.items) {
+      const recipient = recipientById.get(item.recipientId)
+      const product = productById.get(item.productId)
+      lines.push(
+        row([
+          recipient?.name ?? '',
+          recipient?.address ?? '',
+          product?.name ?? '',
+          item.remainingQty,
+          product?.unit ?? '',
+          item.remainingKg.toLocaleString('ru-RU', { maximumFractionDigits: 1 }),
+          PRIORITY_LABEL[item.priority],
+          item.cost.toLocaleString('ru-RU', { maximumFractionDigits: 0 }),
+        ]),
+      )
+    }
+    lines.push(
+      row([
+        'ИТОГО за счёт Фонда',
+        '',
+        '',
+        '',
+        '',
+        uncovered.totalRemainingKg.toLocaleString('ru-RU', { maximumFractionDigits: 1 }),
+        '',
+        uncovered.totalCost.toLocaleString('ru-RU', { maximumFractionDigits: 0 }),
+      ]),
+    )
+    lines.push(row(['Излишками покрыто', `${uncovered.coveredPct}% веса открытых нужд`]))
   }
 
   return '\uFEFF' + lines.join('\r\n')

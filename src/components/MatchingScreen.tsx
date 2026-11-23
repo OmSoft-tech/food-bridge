@@ -3,13 +3,16 @@ import { products, recipients, stores } from '../data'
 import { formatCoverage, formatKg, formatTime } from '../lib/format'
 import type { MatchPlan, Transfer } from '../lib/matching'
 import type { HistoryAction, HistoryEntry } from '../lib/journal'
+import type { UncoveredSummary } from '../lib/uncovered'
 import { downloadCsv, planCsvFilename, transfersToCsv } from '../lib/csv'
 import { Badge } from './ui'
+import UncoveredNeeds from './UncoveredNeeds'
 
 interface Props {
   plan: MatchPlan | null
   confirmed: Set<string>
   history: HistoryEntry[]
+  uncovered: UncoveredSummary | null
   onBuild: () => void
   onReset: () => void
   onConfirm: (transferId: string) => void
@@ -25,6 +28,7 @@ export default function MatchingScreen({
   plan,
   confirmed,
   history,
+  uncovered,
   onBuild,
   onReset,
   onConfirm,
@@ -58,7 +62,14 @@ export default function MatchingScreen({
               onClick={() => {
                 downloadCsv(
                   planCsvFilename(),
-                  transfersToCsv({ transfers: plan.transfers, confirmed, products, stores, recipients }),
+                  transfersToCsv({
+                    transfers: plan.transfers,
+                    confirmed,
+                    products,
+                    stores,
+                    recipients,
+                    uncovered: uncovered ?? undefined,
+                  }),
                 )
                 onLog(
                   'export',
@@ -145,6 +156,8 @@ export default function MatchingScreen({
               )
             })}
           </div>
+
+          {uncovered && <UncoveredNeeds summary={uncovered} />}
         </>
       )}
 
