@@ -1,12 +1,19 @@
-import { useMemo } from 'react'
-import { products, recipients, stores } from '../data'
+import { useMemo, useState } from 'react'
+import { products, recipients, stores, surpluses, needs } from '../data'
 import { formatCoverage, formatKg, formatTime } from '../lib/format'
-import type { MatchPlan, Transfer } from '../lib/matching'
+import { buildMatchPlan, type MatchPlan, type Transfer } from '../lib/matching'
+import { computeUncovered, uncoveredToBasketItems, uncoveredToRefillItem, type UncoveredSummary } from '../lib/uncovered'
+import { planPickupSchedule, type PickupDay } from '../lib/schedule'
 import type { HistoryAction, HistoryEntry } from '../lib/journal'
-import type { UncoveredSummary } from '../lib/uncovered'
-import type { PickupDay } from '../lib/schedule'
 import type { BasketItem } from '../lib/basket'
-import { uncoveredToBasketItems, uncoveredToRefillItem } from '../lib/uncovered'
+import {
+  BASE_SCENARIO,
+  buildPlanDelta,
+  formatDelta,
+  isBaseScenario,
+  STRATEGIES,
+  type ScenarioParams,
+} from '../lib/scenario'
 import { downloadCsv, planCsvFilename, transfersToCsv } from '../lib/csv'
 import { Badge } from './ui'
 import UncoveredNeeds from './UncoveredNeeds'
@@ -47,6 +54,46 @@ export default function MatchingScreen({
   const recipientById = useMemo(() => new Map(recipients.map((r) => [r.id, r])), [])
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [])
 
+  // Сценарные параметры — сессионные (в localStorage не пишутся).
+  const [scenario, setScenario] = useState<ScenarioParams>(BASE_SCENARIO)
+  const scenarioActive = !isBaseScenario(scenario)
+
+  // Сценарный план пересчитывается сразу при смене параметров — без «Подобрать».
+  const scenarioPlan: MatchPlan | null = useMemo(() => {
+    if (plan === null) return null
+    if (!scenarioActive) return plan
+    return buildMatchPlan(products, surpluses, needs, {
+      strategy: scenario.strategy,
+      dailyLimitKg: scenario.dailyLimitKg,
+      stores,
+      recipients,
+    })
+  }, [plan, scenario, scenarioActive])
+
+  // Сценарные производные (дельта, непокрытые, вывозы) — по отображаемому плану.
+  const scenarioUncovered = useMemo(
+    () =>
+      scenarioPlan !== null && scenarioActive
+        ? computeUncovered(products, needs, scenarioPlan)
+        : uncovered,
+    [scenarioPlan, scenarioActive, uncovered],
+  )
+  const scenarioSchedule = useMemo(
+    () =>
+      scenarioPlan !== null && scenarioActive
+        ? planPickupSchedule(scenarioPlan, surpluses, stores, recipients, new Set())
+        : schedule,
+    [scenarioPlan, scenarioActive, schedule],
+  )
+  const planDelta = useMemo(
+    () =>
+      plan !== null && scenarioPlan !== null && scenarioActive
+        ? buildPlanDelta(plan, scenarioPlan, products, needs)
+        : null,
+    [plan, scenarioPlan, scenarioActive],
+  )
+  const displayed = scenarioPlan ?? plan
+
   return (
     <section>
       <h1 className="section-title">Мэтчинг передач</h1>
@@ -69,20 +116,21 @@ export default function MatchingScreen({
               type="button"
               className="btn btn--ghost"
               onClick={() => {
+                if (displayed === null) return
                 downloadCsv(
                   planCsvFilename(),
                   transfersToCsv({
-                    transfers: plan.transfers,
+                    transfers: displayed.transfers,
                     confirmed,
                     products,
                     stores,
                     recipients,
-                    uncovered: uncovered ?? undefined,
+                    uncovered: scenarioUncovered ?? undefined,
                   }),
                 )
                 onLog(
                   'export',
-                  `план передач экспортирован в CSV (${plan.transfers.length} передач, ${formatKg(plan.totalKg)})`,
+                  `план передач экспортирован в CSV (${displayed.transfers.length} передач, ${formatKg(displayed.totalKg)})`,
                 )
               }}
             >
@@ -95,7 +143,70 @@ export default function MatchingScreen({
         )}
       </div>
 
-      {plan === null ? (
+      {displayed !== null && (
+        <div className="breakdown scenarios">
+          <h2 className="section-title" style={{ fontSize: 16 }}>
+            Сценарии что-если
+          </h2>
+          <p className="section-sub">
+            План пересчитывается сразу при смене сценария. Подтверждать передачи можно только в
+            базовом сценарии.
+          </p>
+          <div className="toolbar" style={{ marginBottom: 8 }}>
+            <div className="field">
+              <span className="field__label">Приоритет мэтчинга</span>
+              <div className="segmented" role="group" aria-label="Приоритет мэтчинга">
+                {STRATEGIES.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={`segment${scenario.strategy === s.id ? ' segment--active' : ''}`}
+                    title={s.hint}
+                    onClick={() => setScenario({ ...scenario, strategy: s.id })}
+                  >
+                    {s.label}
+                    {s.id === 'expiry' && ' (базовый)'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="field">
+              <label className="field__label" htmlFor="sc-limit">
+                Лимит вывоза в день, кг
+              </label>
+              <input
+                id="sc-limit"
+                type="number"
+                inputMode="numeric"
+                min="0"
+                step="any"
+                value={scenario.dailyLimitKg}
+                onChange={(e) =>
+                  setScenario({ ...scenario, dailyLimitKg: Math.max(0, Number(e.target.value) || 0) })
+                }
+              />
+            </div>
+          </div>
+          {planDelta !== null && (
+            <div className="card__row" role="status">
+              <Badge tone={planDelta.transfers > 0 ? 'green' : planDelta.transfers < 0 ? 'red' : 'gray'}>
+                {formatDelta(planDelta.transfers, 'перед.')}
+              </Badge>
+              <Badge tone={planDelta.kg > 0 ? 'green' : planDelta.kg < 0 ? 'red' : 'gray'}>
+                {formatDelta(planDelta.kg, 'кг')}
+              </Badge>
+              <Badge tone={planDelta.personDays > 0 ? 'green' : planDelta.personDays < 0 ? 'red' : 'gray'}>
+                {formatDelta(planDelta.personDays, 'чел.-дн.')}
+              </Badge>
+              <Badge tone={planDelta.deficitCost < 0 ? 'green' : planDelta.deficitCost > 0 ? 'amber' : 'gray'}>
+                {formatDelta(planDelta.deficitCost, '₽ дефицита')}
+              </Badge>
+            </div>
+          )}
+        </div>
+      )}
+
+      {displayed === null ? (
         <div className="empty">
           Нажмите «Подобрать передачи» — алгоритм сопоставит витрину излишков с открытыми нуждами
           и покажет план: магазин → пункт, состав, вес и покрытие.
@@ -103,15 +214,17 @@ export default function MatchingScreen({
       ) : (
         <>
           <p className="section-sub">
-            План: {plan.transfers.length} передач(и) · общий вес {formatKg(plan.totalKg)} ·
-            покрытие {Math.round(plan.personDays)} чел.-дн. ({formatCoverage(plan.personDays)})
+            План: {displayed.transfers.length} передач(и) · общий вес {formatKg(displayed.totalKg)} ·
+            покрытие {Math.round(displayed.personDays)} чел.-дн. (
+            {formatCoverage(displayed.personDays)})
+            {scenarioActive && ' — сценарий, подтверждения недоступны'}
           </p>
 
           <div className="cards">
-            {plan.transfers.map((t) => {
+            {displayed.transfers.map((t) => {
               const store = storeById.get(t.storeId)
               const recipient = recipientById.get(t.recipientId)
-              const isConfirmed = confirmed.has(t.id)
+              const isConfirmed = !scenarioActive && confirmed.has(t.id)
               const badge = STATUS_BADGE[isConfirmed ? 'confirmed' : 'planned']
               return (
                 <article className="card transfer" key={t.id}>
@@ -146,19 +259,25 @@ export default function MatchingScreen({
                     <Badge tone="green">покрывает {formatCoverage(t.personDays)}</Badge>
                   </div>
                   <div className="card__row">
-                    <Badge tone={badge.tone}>{badge.label}</Badge>
-                    {!isConfirmed ? (
-                      <button
-                        type="button"
-                        className="btn btn--small"
-                        onClick={() => onConfirm(t.id)}
-                      >
-                        Подтвердить
-                      </button>
+                    {scenarioActive ? (
+                      <Badge tone="blue">сценарий — подтверждение в базовом</Badge>
                     ) : (
-                      <span className="progress-label">
-                        Передача подтверждена — излишки зарезервированы за пунктом.
-                      </span>
+                      <>
+                        <Badge tone={badge.tone}>{badge.label}</Badge>
+                        {!isConfirmed ? (
+                          <button
+                            type="button"
+                            className="btn btn--small"
+                            onClick={() => onConfirm(t.id)}
+                          >
+                            Подтвердить
+                          </button>
+                        ) : (
+                          <span className="progress-label">
+                            Передача подтверждена — излишки зарезервированы за пунктом.
+                          </span>
+                        )}
+                      </>
                     )}
                   </div>
                 </article>
@@ -166,13 +285,13 @@ export default function MatchingScreen({
             })}
           </div>
 
-          <PickupSchedule schedule={schedule} />
+          <PickupSchedule schedule={scenarioSchedule} />
 
-          {uncovered && (
+          {scenarioUncovered && (
             <UncoveredNeeds
-              summary={uncovered}
+              summary={scenarioUncovered}
               onSend={(item) => onAddRefills([uncoveredToRefillItem(item)])}
-              onSendAll={() => onAddRefills(uncoveredToBasketItems(uncovered))}
+              onSendAll={() => onAddRefills(uncoveredToBasketItems(scenarioUncovered))}
             />
           )}
         </>

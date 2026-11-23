@@ -1,5 +1,9 @@
 import type { Recipient, Store, Surplus } from '../types'
 import type { MatchPlan } from './matching'
+import { haversineKm } from './geo'
+
+/** Реэкспорт: существующий код/tests импортируют haversine из schedule. */
+export { haversineKm }
 
 const DAY_MS = 86_400_000
 
@@ -28,18 +32,6 @@ export interface PickupDay {
   routes: PickupRoute[]
   transferCount: number
   totalKg: number
-}
-
-/** Расстояние по большому кругу Земли, км (сфера, R = 6371). */
-export function haversineKm(aLat: number, aLon: number, bLat: number, bLon: number): number {
-  const R = 6371
-  const rad = Math.PI / 180
-  const dLat = (bLat - aLat) * rad
-  const dLon = (bLon - aLon) * rad
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(aLat * rad) * Math.cos(bLat * rad) * Math.sin(dLon / 2) ** 2
-  return 2 * R * Math.asin(Math.sqrt(h))
 }
 
 function clampDay(days: number): number {
