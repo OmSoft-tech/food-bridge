@@ -50,6 +50,8 @@ export interface Store {
   chain: string
   address: string
   district: string
+  lat: number
+  lon: number
 }
 
 export interface Recipient {
@@ -57,4 +59,6 @@ export interface Recipient {
   name: string
   address: string
   district: string
+  lat: number
+  lon: number
 }
