@@ -1,5 +1,6 @@
 import type { Need, Priority, Product } from '../types'
 import type { MatchPlan } from './matching'
+import type { BasketItem } from './basket'
 
 export interface UncoveredItem {
   needId: string
@@ -100,4 +101,19 @@ export function computeUncovered(
     coveredPct,
     moneyPct: 100 - coveredPct,
   }
+}
+
+/** Позиция докупки из элемента непокрытых нужд (пометка «докупка»). */
+export function uncoveredToRefillItem(item: UncoveredItem): BasketItem {
+  return {
+    productId: item.productId,
+    qty: item.remainingQty,
+    refillOf: item.needId,
+    recipientId: item.recipientId,
+  }
+}
+
+/** Весь дефицит → позиции набора калькулятора. */
+export function uncoveredToBasketItems(summary: UncoveredSummary): BasketItem[] {
+  return summary.items.map(uncoveredToRefillItem)
 }

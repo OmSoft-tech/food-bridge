@@ -4,6 +4,42 @@ import { KCAL_PER_KG, NORM_KG_PER_PERSON_DAY } from './nutrition'
 export interface BasketItem {
   productId: string
   qty: number
+  /** пометка «докупка»: id непокрытой нужды, которую закрывает позиция */
+  refillOf?: string
+  /** пункт помощи, для которого покупается позиция */
+  recipientId?: string
+}
+
+/** Ключ позиции в наборе: товар + источник (для докупок — по нужде). */
+export function basketItemKey(item: BasketItem): string {
+  return `${item.productId}|${item.refillOf ?? ''}|${item.recipientId ?? ''}`
+}
+
+/**
+ * Слияние позиций докупки в набор без дублей: позиция с тем же товаром
+ * и пунктом уже есть в наборе (даже если план пересобран) — пропускается.
+ */
+export function mergeRefillItems(
+  items: BasketItem[],
+  refills: BasketItem[],
+): { items: BasketItem[]; added: number; skipped: number } {
+  const next = [...items]
+  const seen = new Set(
+    next.filter((i) => i.refillOf).map((i) => `${i.productId}|${i.recipientId}`),
+  )
+  let added = 0
+  let skipped = 0
+  for (const refill of refills) {
+    const key = `${refill.productId}|${refill.recipientId}`
+    if (seen.has(key)) {
+      skipped += 1
+      continue
+    }
+    next.push(refill)
+    seen.add(key)
+    added += 1
+  }
+  return { items: next, added, skipped }
 }
 
 export interface BasketSummary {

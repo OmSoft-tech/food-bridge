@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { basketsForBudget, computeBasket } from './basket'
+import { basketsForBudget, computeBasket, basketItemKey, mergeRefillItems, type BasketItem } from './basket'
 import { products as mockProducts } from '../data'
 import { PRESET } from '../components/CalculatorScreen'
 import type { Product } from '../types'
@@ -74,5 +74,60 @@ describe('basketsForBudget', () => {
     expect(basketsForBudget(20000, s.totalCost)).toBe(2)
     expect(s.totalCost).toBe(10000)
     expect(s.totalCost / s.personDays).toBeCloseTo(25, 0)
+  })
+})
+
+describe('mergeRefillItems: докупки без дублей', () => {
+  const refill = (productId: string, recipientId: string, qty = 1): BasketItem => ({
+    productId,
+    qty,
+    refillOf: `need-${productId}-${recipientId}`,
+    recipientId,
+  })
+
+  it('пустой набор — все позиции добавляются', () => {
+    const r = mergeRefillItems([], [refill('p1', 'r1'), refill('p2', 'r2')])
+    expect(r.added).toBe(2)
+    expect(r.skipped).toBe(0)
+    expect(r.items).toHaveLength(2)
+  })
+
+  it('повторная отправка того же дефицита не дублирует позиции', () => {
+    const refills = [refill('p1', 'r1', 6)]
+    const first = mergeRefillItems([], refills)
+    const second = mergeRefillItems(first.items, refills)
+    expect(second.added).toBe(0)
+    expect(second.skipped).toBe(1)
+    expect(second.items).toHaveLength(1)
+    expect(second.items[0].qty).toBe(6)
+  })
+
+  it('дедуп по товару + пункту: другой needId того же товара и пункта пропускается', () => {
+    const existing: BasketItem[] = [{ productId: 'p1', qty: 3, refillOf: 'need-old', recipientId: 'r1' }]
+    const res = mergeRefillItems(existing, [refill('p1', 'r1', 6)])
+    expect(res.added).toBe(0)
+  })
+
+  it('тот же товар, но другой пункт — добавляется', () => {
+    const existing: BasketItem[] = [{ productId: 'p1', qty: 3, refillOf: 'need-old', recipientId: 'r1' }]
+    const res = mergeRefillItems(existing, [refill('p1', 'r2', 6)])
+    expect(res.added).toBe(1)
+    expect(res.items).toHaveLength(2)
+  })
+
+  it('обычная позиция того же товара не блокирует докупку', () => {
+    const existing: BasketItem[] = [{ productId: 'p1', qty: 10 }]
+    const res = mergeRefillItems(existing, [refill('p1', 'r1', 6)])
+    expect(res.added).toBe(1)
+    expect(res.items).toHaveLength(2)
+  })
+
+  it('ключи позиций уникальны после слияния', () => {
+    const res = mergeRefillItems(
+      [{ productId: 'p1', qty: 10 }],
+      [refill('p1', 'r1'), refill('p1', 'r2')],
+    )
+    const keys = res.items.map(basketItemKey)
+    expect(new Set(keys).size).toBe(keys.length)
   })
 })

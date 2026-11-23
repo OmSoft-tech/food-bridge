@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildMatchPlan } from './matching'
-import { computeUncovered } from './uncovered'
+import { computeUncovered, uncoveredToBasketItems, uncoveredToRefillItem } from './uncovered'
 import { transfersToCsv } from './csv'
 import type { Need, Product, Surplus } from '../types'
 import { needs as mockNeeds, products as mockProducts, surpluses as mockSurpluses } from '../data'
@@ -173,5 +173,33 @@ describe('CSV-блок «Докупить за счёт Фонда»', () => {
       recipients: [],
     })
     expect(csv.includes('Докупить за счёт Фонда')).toBe(false)
+  })
+})
+
+describe('дефицит → позиции набора калькулятора', () => {
+  it('одна позиция: товар, остаток, пометка докупки и пункт', () => {
+    const item = uncoveredToRefillItem({
+      needId: 'n03',
+      recipientId: 'r1',
+      productId: 'p26',
+      remainingQty: 7,
+      remainingKg: 2.4,
+      priority: 'medium',
+      cost: 840,
+    })
+    expect(item).toEqual({ productId: 'p26', qty: 7, refillOf: 'n03', recipientId: 'r1' })
+  })
+
+  it('весь дефицит маппится 1:1 по позициям', () => {
+    const plan = buildMatchPlan(mockProducts, mockSurpluses, mockNeeds)
+    const s = computeUncovered(mockProducts, mockNeeds, plan)
+    const refills = uncoveredToBasketItems(s)
+    expect(refills).toHaveLength(s.items.length)
+    for (const [i, item] of s.items.entries()) {
+      expect(refills[i].productId).toBe(item.productId)
+      expect(refills[i].qty).toBe(item.remainingQty)
+      expect(refills[i].refillOf).toBe(item.needId)
+      expect(refills[i].recipientId).toBe(item.recipientId)
+    }
   })
 })

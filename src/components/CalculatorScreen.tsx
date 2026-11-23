@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
-import { products } from '../data'
+import { products, recipients } from '../data'
 import { CATEGORIES, CATEGORY_LABEL, KCAL_PER_KG, NORM_KG_PER_PERSON_DAY } from '../lib/nutrition'
-import { computeBasket, basketsForBudget, type BasketItem } from '../lib/basket'
+import { computeBasket, basketsForBudget, basketItemKey, type BasketItem } from '../lib/basket'
 import { formatCoverage, formatKcal, formatKg, formatMoney, formatNumber } from '../lib/format'
 import type { HistoryAction } from '../lib/journal'
+import { Badge } from './ui'
 
 /** Условный «средний набор» — быстрый старт для демо и жюри. Экспортируется для тестов. */
 export const PRESET: BasketItem[] = [
@@ -16,39 +17,47 @@ export const PRESET: BasketItem[] = [
 ]
 
 /** Демо-бюджет для «Пример набора», чтобы сразу показать бюджетные тайлы. */
-const PRESET_BUDGET = '20000'
+export const PRESET_BUDGET = '20000'
 
 /**
- * initialDemo=true (deep-link ?tab=calc&run=demo) — открывается сразу
- * с примером набора в бюджете, как после кнопки «Пример набора».
+ * Набор живёт в App (positions докупки добавляются из «Непокрытых нужд»),
+ * калькулятор работает с контролируемыми items/budget. initialDemo=true
+ * (deep-link ?tab=calc&run=demo) управляет начальным состоянием в App.
  */
 export default function CalculatorScreen({
-  initialDemo = false,
+  items,
+  budget,
+  onItemsChange,
+  onBudgetChange,
   onLog,
 }: {
-  initialDemo?: boolean
+  items: BasketItem[]
+  budget: string
+  onItemsChange: (items: BasketItem[]) => void
+  onBudgetChange: (budget: string) => void
   onLog?: (action: HistoryAction, label: string) => void
 }) {
-  const [items, setItems] = useState<BasketItem[]>(() =>
-    initialDemo ? PRESET.map((p) => ({ ...p })) : [],
-  )
   const [productId, setProductId] = useState(products[0].id)
   const [qty, setQty] = useState('10')
-  const [budget, setBudget] = useState(() => (initialDemo ? PRESET_BUDGET : ''))
 
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [])
+  const recipientById = useMemo(() => new Map(recipients.map((r) => [r.id, r])), [])
 
   const add = () => {
     const n = Number(qty.replace(',', '.'))
     if (!Number.isFinite(n) || n <= 0) return
     const product = productById.get(productId)
-    setItems((prev) => {
-      const existing = prev.find((i) => i.productId === productId)
-      if (existing) {
-        return prev.map((i) => (i.productId === productId ? { ...i, qty: i.qty + n } : i))
-      }
-      return [...prev, { productId, qty: n }]
-    })
+    // обычная позиция суммируется с другой обычной; докупки — отдельные строки
+    const existing = items.find((i) => i.productId === productId && !i.refillOf)
+    if (existing) {
+      onItemsChange(
+        items.map((i) =>
+          basketItemKey(i) === basketItemKey(existing) ? { ...i, qty: i.qty + n } : i,
+        ),
+      )
+    } else {
+      onItemsChange([...items, { productId, qty: n }])
+    }
     onLog?.(
       'calc-add',
       product
@@ -57,10 +66,16 @@ export default function CalculatorScreen({
     )
   }
 
-  const remove = (id: string) => {
-    const product = productById.get(id)
-    setItems((prev) => prev.filter((i) => i.productId !== id))
-    if (product) onLog?.('calc-remove', `убран товар: ${product.name}`)
+  const remove = (item: BasketItem) => {
+    const product = productById.get(item.productId)
+    onItemsChange(items.filter((i) => basketItemKey(i) !== basketItemKey(item)))
+    if (product) {
+      const target = item.recipientId ? recipientById.get(item.recipientId)?.name : undefined
+      onLog?.(
+        'calc-remove',
+        `убран товар: ${product.name}${target ? ` (докупка для ${target})` : ''}`,
+      )
+    }
   }
 
   const { totalKg, totalKcal, totalCost, personDays, kgByCategory } = computeBasket(products, items)
@@ -119,7 +134,7 @@ export default function CalculatorScreen({
             step="any"
             placeholder="не задан"
             value={budget}
-            onChange={(e) => setBudget(e.target.value)}
+            onChange={(e) => onBudgetChange(e.target.value)}
           />
         </div>
         <button type="button" className="btn btn--primary" onClick={add}>
@@ -129,8 +144,8 @@ export default function CalculatorScreen({
           type="button"
           className="btn btn--ghost"
           onClick={() => {
-            setItems(PRESET.map((p) => ({ ...p })))
-            setBudget(PRESET_BUDGET)
+            onItemsChange(PRESET.map((p) => ({ ...p })))
+            onBudgetChange(PRESET_BUDGET)
             onLog?.('calc-preset', `подставлен пример набора (${PRESET.length} позиций, бюджет ${formatMoney(Number(PRESET_BUDGET))})`)
           }}
         >
@@ -140,7 +155,7 @@ export default function CalculatorScreen({
           type="button"
           className="btn btn--ghost"
           onClick={() => {
-            setItems([])
+            onItemsChange([])
             onLog?.('calc-clear', `набор очищен (${items.length} позиций было)`)
           }}
           disabled={items.length === 0}
@@ -231,9 +246,19 @@ export default function CalculatorScreen({
               {items.map((item) => {
                 const product = productById.get(item.productId)
                 if (!product) return null
+                const recipientName = item.recipientId
+                  ? recipientById.get(item.recipientId)?.name
+                  : undefined
                 return (
-                  <li className="list__item" key={item.productId}>
-                    <span>{product.name}</span>
+                  <li className="list__item" key={basketItemKey(item)}>
+                    <span>
+                      {product.name}{' '}
+                      {item.refillOf && (
+                        <Badge tone="green">
+                          докупка{recipientName ? ` → ${recipientName}` : ''}
+                        </Badge>
+                      )}
+                    </span>
                     <span>
                       {item.qty} {product.unit} · {formatKg(item.qty * product.unitWeightKg)} ·{' '}
                       {formatMoney(item.qty * product.price)}
@@ -241,7 +266,7 @@ export default function CalculatorScreen({
                         type="button"
                         className="btn btn--small btn--ghost"
                         style={{ marginLeft: 8 }}
-                        onClick={() => remove(item.productId)}
+                        onClick={() => remove(item)}
                         aria-label={`Убрать ${product.name}`}
                       >
                         ✕

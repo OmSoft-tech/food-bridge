@@ -1,16 +1,27 @@
 import { recipients, products } from '../data'
 import { PRIORITY_LABEL } from '../lib/nutrition'
 import { formatKg, formatMoney, formatNumber } from '../lib/format'
-import type { UncoveredSummary } from '../lib/uncovered'
+import type { UncoveredItem, UncoveredSummary } from '../lib/uncovered'
 import { StatTile } from './ui'
 
 /**
  * Секция «Непокрытые нужды»: что осталось собрать после плана,
  * за сколько Фонд докупит недостающее и покрытие деньгами/излишками.
+ * С колбэками onSend/onSendAll (вкладка мэтчинга) — кнопки отправки
+ * дефицита в калькулятор; на дашборде кнопок нет.
  */
-export default function UncoveredNeeds({ summary }: { summary: UncoveredSummary }) {
+export default function UncoveredNeeds({
+  summary,
+  onSend,
+  onSendAll,
+}: {
+  summary: UncoveredSummary
+  onSend?: (item: UncoveredItem) => void
+  onSendAll?: () => void
+}) {
   const recipientById = new Map(recipients.map((r) => [r.id, r]))
   const productById = new Map(products.map((p) => [p.id, p]))
+  const canSend = onSend !== undefined || onSendAll !== undefined
 
   return (
     <div className="breakdown">
@@ -29,6 +40,18 @@ export default function UncoveredNeeds({ summary }: { summary: UncoveredSummary 
         </p>
       ) : (
         <>
+          <div className="card__row" style={{ justifyContent: 'flex-end' }}>
+            {canSend && (
+              <button
+                type="button"
+                className="btn btn--small btn--primary"
+                onClick={onSendAll}
+                title="Добавить все позиции дефицита в набор калькулятора"
+              >
+                🛒 Добавить весь дефицит в калькулятор
+              </button>
+            )}
+          </div>
           <div className="tiles">
             <StatTile value={formatKg(summary.totalRemainingKg)} label="Осталось собрать" />
             <StatTile
@@ -57,6 +80,7 @@ export default function UncoveredNeeds({ summary }: { summary: UncoveredSummary 
                 <th>Остаток</th>
                 <th>Вес</th>
                 <th>Стоимость</th>
+                {canSend && <th aria-label="Действия" />}
               </tr>
             </thead>
             <tbody>
@@ -73,6 +97,18 @@ export default function UncoveredNeeds({ summary }: { summary: UncoveredSummary 
                     </td>
                     <td>{formatKg(item.remainingKg)}</td>
                     <td>{formatMoney(item.cost)}</td>
+                    {canSend && (
+                      <td>
+                        <button
+                          type="button"
+                          className="btn btn--small btn--ghost"
+                          onClick={() => onSend?.(item)}
+                          title="Добавить эту позицию дефицита в набор калькулятора"
+                        >
+                          В калькулятор
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 )
               })}

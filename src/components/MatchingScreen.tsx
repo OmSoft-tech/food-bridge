@@ -5,6 +5,8 @@ import type { MatchPlan, Transfer } from '../lib/matching'
 import type { HistoryAction, HistoryEntry } from '../lib/journal'
 import type { UncoveredSummary } from '../lib/uncovered'
 import type { PickupDay } from '../lib/schedule'
+import type { BasketItem } from '../lib/basket'
+import { uncoveredToBasketItems, uncoveredToRefillItem } from '../lib/uncovered'
 import { downloadCsv, planCsvFilename, transfersToCsv } from '../lib/csv'
 import { Badge } from './ui'
 import UncoveredNeeds from './UncoveredNeeds'
@@ -20,6 +22,8 @@ interface Props {
   onReset: () => void
   onConfirm: (transferId: string) => void
   onLog: (action: HistoryAction, label: string) => void
+  /** дефицит → набор калькулятора (журнал + переход на вкладку) */
+  onAddRefills: (refills: BasketItem[]) => void
 }
 
 const STATUS_BADGE: Record<Transfer['status'], { tone: 'amber' | 'green'; label: string }> = {
@@ -37,6 +41,7 @@ export default function MatchingScreen({
   onReset,
   onConfirm,
   onLog,
+  onAddRefills,
 }: Props) {
   const storeById = useMemo(() => new Map(stores.map((s) => [s.id, s])), [])
   const recipientById = useMemo(() => new Map(recipients.map((r) => [r.id, r])), [])
@@ -163,7 +168,13 @@ export default function MatchingScreen({
 
           <PickupSchedule schedule={schedule} />
 
-          {uncovered && <UncoveredNeeds summary={uncovered} />}
+          {uncovered && (
+            <UncoveredNeeds
+              summary={uncovered}
+              onSend={(item) => onAddRefills([uncoveredToRefillItem(item)])}
+              onSendAll={() => onAddRefills(uncoveredToBasketItems(uncovered))}
+            />
+          )}
         </>
       )}
 

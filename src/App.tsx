@@ -2,14 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { needs, products, recipients, stores, surpluses } from './data'
 import { buildMatchPlan, type MatchPlan } from './lib/matching'
 import { computeUncovered } from './lib/uncovered'
+import { mergeRefillItems, type BasketItem } from './lib/basket'
+import { formatKg, formatMoney } from './lib/format'
 import { planPickupSchedule } from './lib/schedule'
-import { formatKg } from './lib/format'
 import { loadJournal, HISTORY_KEY, HISTORY_LIMIT, type HistoryAction, type HistoryEntry } from './lib/journal'
 import Dashboard from './components/Dashboard'
 import SurplusScreen from './components/SurplusScreen'
 import NeedsScreen from './components/NeedsScreen'
 import MatchingScreen from './components/MatchingScreen'
-import CalculatorScreen from './components/CalculatorScreen'
+import CalculatorScreen, { PRESET, PRESET_BUDGET } from './components/CalculatorScreen'
 import JournalScreen from './components/JournalScreen'
 import MapScreen from './components/MapScreen'
 
@@ -169,6 +170,43 @@ export default function App() {
   )
   const handleClearHistory = () => setHistory([])
 
+  /* ── Калькулятор: набор живёт в App, докупки добавляются из «Непокрытых нужд» ── */
+
+  const [calcItems, setCalcItems] = useState<BasketItem[]>(() =>
+    launch.runDemo && launch.tab === 'calc' ? PRESET.map((p) => ({ ...p })) : [],
+  )
+  const [calcBudget, setCalcBudget] = useState(() =>
+    launch.runDemo && launch.tab === 'calc' ? PRESET_BUDGET : '',
+  )
+
+  const priceById = useMemo(() => new Map(products.map((p) => [p.id, p.price])), [])
+
+  /** Дефицит → набор калькулятора: без дублей, журнал + переход на вкладку. */
+  const handleAddRefills = useCallback(
+    (refills: BasketItem[]) => {
+      if (refills.length === 0) return
+      const fresh = refills.filter(
+        (r) =>
+          !calcItems.some(
+            (i) => i.refillOf && i.productId === r.productId && i.recipientId === r.recipientId,
+          ),
+      )
+      if (fresh.length === 0) {
+        logHistory('refill', 'дефицит уже в калькуляторе — добавлять нечего')
+        selectTab('calc')
+        return
+      }
+      setCalcItems(mergeRefillItems(calcItems, fresh).items)
+      const cost = fresh.reduce((sum, r) => sum + r.qty * (priceById.get(r.productId) ?? 0), 0)
+      logHistory(
+        'refill',
+        `в калькулятор отправлен дефицит: ${fresh.length} позиций, докупка ≈ ${formatMoney(cost)}`,
+      )
+      selectTab('calc')
+    },
+    [calcItems, logHistory, priceById, selectTab],
+  )
+
   return (
     <div className="app">
       <header className="header">
@@ -213,11 +251,15 @@ export default function App() {
             onReset={handleReset}
             onConfirm={handleConfirm}
             onLog={logHistory}
+            onAddRefills={handleAddRefills}
           />
         )}
         {tab === 'calc' && (
           <CalculatorScreen
-            initialDemo={launch.runDemo && launch.tab === 'calc'}
+            items={calcItems}
+            budget={calcBudget}
+            onItemsChange={setCalcItems}
+            onBudgetChange={setCalcBudget}
             onLog={logHistory}
           />
         )}
