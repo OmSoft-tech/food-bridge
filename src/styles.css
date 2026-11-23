@@ -572,6 +572,15 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+.map-popup .map-status {
+  margin-top: 8px;
+}
+
+.map-popup .map-status--confirmed {
+  color: var(--green);
+  font-weight: 600;
+}
+
 .map-pin {
   display: flex;
   align-items: center;

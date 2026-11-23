@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { needs, products, recipients, stores, surpluses } from './data'
 import { buildMatchPlan, type MatchPlan } from './lib/matching'
 import { computeUncovered } from './lib/uncovered'
@@ -134,9 +134,12 @@ export default function App() {
   const storeById = useMemo(() => new Map(stores.map((s) => [s.id, s])), [])
   const recipientById = useMemo(() => new Map(recipients.map((r) => [r.id, r])), [])
 
-  /** Запись значимого действия оператора в журнал. */
-  const logHistory = (action: HistoryAction, label: string) =>
-    setHistory((prev) => [...prev, { ts: Date.now(), action, label }].slice(-HISTORY_LIMIT))
+  /** Запись значимого действия оператора в журнал (стабильная ссылка). */
+  const logHistory = useCallback(
+    (action: HistoryAction, label: string) =>
+      setHistory((prev) => [...prev, { ts: Date.now(), action, label }].slice(-HISTORY_LIMIT)),
+    [],
+  )
 
   const handleBuild = () => {
     const next = buildMatchPlan(products, surpluses, needs)
@@ -147,18 +150,23 @@ export default function App() {
     setPlan(null)
     logHistory('reset', 'план сброшен')
   }
-  const handleConfirm = (transferId: string) => {
-    setConfirmedIds((prev) => new Set(prev).add(transferId))
-    const t = plan?.transfers.find((x) => x.id === transferId)
-    if (t) {
-      const store = storeById.get(t.storeId)
-      const recipient = recipientById.get(t.recipientId)
-      logHistory(
-        'confirm',
-        `подтверждена передача #${transferId}: ${store?.name} → ${recipient?.name}, ${formatKg(t.totalKg)}`,
-      )
-    }
-  }
+  // useCallback: идентичность колбэка важна для MapScreen (эффект стилей
+  // линий не должен пере-sync на каждый рендер App).
+  const handleConfirm = useCallback(
+    (transferId: string) => {
+      setConfirmedIds((prev) => new Set(prev).add(transferId))
+      const t = plan?.transfers.find((x) => x.id === transferId)
+      if (t) {
+        const store = storeById.get(t.storeId)
+        const recipient = recipientById.get(t.recipientId)
+        logHistory(
+          'confirm',
+          `подтверждена передача #${transferId}: ${store?.name} → ${recipient?.name}, ${formatKg(t.totalKg)}`,
+        )
+      }
+    },
+    [plan, storeById, recipientById, logHistory],
+  )
   const handleClearHistory = () => setHistory([])
 
   return (
@@ -219,7 +227,7 @@ export default function App() {
             onClearHistory={handleClearHistory}
           />
         )}
-        {tab === 'map' && <MapScreen plan={plan} confirmed={confirmedIds} />}
+        {tab === 'map' && <MapScreen plan={plan} confirmed={confirmedIds} onConfirm={handleConfirm} />}
       </main>
 
       <footer className="footer">

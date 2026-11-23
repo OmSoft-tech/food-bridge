@@ -5,7 +5,9 @@
 
 interface LeafletLayer {
   addTo(map: LeafletMap): this
-  bindPopup(html: string): this
+  bindPopup(content: string | HTMLElement): this
+  /** Заменяет содержимое открытого попапа слоя. */
+  setPopupContent(content: string | HTMLElement): this
 }
 
 interface LeafletBounds {}
@@ -19,7 +21,9 @@ interface LeafletMarker extends LeafletLayer {}
 
 interface LeafletTileLayer extends LeafletLayer {}
 
-interface LeafletPolyline extends LeafletLayer {}
+interface LeafletPolyline extends LeafletLayer {
+  setStyle(options?: { color?: string; weight?: number; opacity?: number; dashArray?: string }): this
+}
 
 interface LeafletDivIcon {}
 
@@ -44,4 +48,8 @@ declare const L: {
     iconAnchor?: [number, number]
   }): LeafletDivIcon
   latLngBounds(points: [number, number][]): LeafletBounds
+  /** Привязка DOM-обработчиков к узлам попапов (нативный Leaflet DOM). */
+  DomEvent: {
+    on(el: HTMLElement, type: string, fn: (ev: Event) => void): void
+  }
 }
