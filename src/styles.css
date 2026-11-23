@@ -514,6 +514,84 @@ body {
   height: 10px;
 }
 
+/* ── Карта (Leaflet) ───────────────────────────────────────────────── */
+
+.map {
+  position: relative;
+  z-index: 0; /* стек: контролы Leaflet не перекрывают sticky-шапку */
+  height: 480px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-soft);
+  background: var(--bg);
+}
+
+/* leaflet.css грузится позже styles.css и красит контейнер в #ddd */
+.map.leaflet-container {
+  background: var(--bg);
+}
+
+/* Тёмная «эко»-тема из светлых тайлов OSM */
+.map .leaflet-tile {
+  filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9);
+}
+
+.map .leaflet-popup-content-wrapper,
+.map .leaflet-popup-tip {
+  background: var(--panel);
+  color: var(--text);
+}
+
+.map .leaflet-popup-content {
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 12px 14px;
+}
+
+.map .leaflet-popup-content ul {
+  margin: 6px 0;
+  padding-left: 18px;
+}
+
+.map .leaflet-popup-close-button {
+  color: var(--muted);
+}
+
+.map .leaflet-control-attribution {
+  background: rgba(20, 26, 23, 0.85);
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.map .leaflet-control-attribution a {
+  color: var(--green);
+}
+
+.map .leaflet-bar a {
+  background: var(--panel);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+
+.map-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--panel);
+  border: 2px solid var(--border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  font-size: 15px;
+}
+
+.map-pin--store {
+  border-color: var(--blue);
+}
+
+.map-pin--recipient {
+  border-color: var(--green);
+  background: var(--green-soft);
+}
+
 /* ── Передачи (мэтчинг) ────────────────────────────────────────────── */
 
 .transfer__route {
@@ -574,6 +652,10 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .map {
+    height: 340px;
+  }
+
   .breakdown__row {
     grid-template-columns: 96px 1fr;
   }
@@ -591,5 +673,70 @@ body {
 @media (max-width: 420px) {
   .tiles {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ── Печать плана передач ──────────────────────────────────────────── */
+
+@media print {
+  .header,
+  .footer,
+  .toolbar,
+  .btn,
+  .note {
+    display: none !important;
+  }
+
+  body {
+    background: #fff !important;
+    color: #111;
+  }
+
+  .app {
+    max-width: none;
+    padding: 0;
+  }
+
+  .card,
+  .tile,
+  .breakdown,
+  .empty {
+    background: #fff;
+    border-color: #bbb;
+    box-shadow: none;
+    break-inside: avoid;
+  }
+
+  .section-title,
+  .card__title,
+  .card__num,
+  .tile__value {
+    color: #111;
+  }
+
+  .section-sub,
+  .card__sub,
+  .tile__label,
+  .tile__hint,
+  .progress-label,
+  .list__item span:last-child {
+    color: #444;
+  }
+
+  .badge,
+  .badge--green,
+  .badge--amber,
+  .badge--red,
+  .badge--blue {
+    background: #fff !important;
+    color: #333 !important;
+    border: 1px solid #999;
+  }
+
+  .bar__seg--done,
+  .bar__seg--confirmed {
+    background: #2ea860 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }

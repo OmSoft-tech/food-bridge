@@ -1,6 +1,7 @@
 import { products, recipients, stores } from '../data'
 import { formatCoverage, formatKg, formatTime } from '../lib/format'
 import type { MatchPlan, Transfer } from '../lib/matching'
+import { downloadCsv, planCsvFilename, transfersToCsv } from '../lib/csv'
 import type { HistoryEntry } from '../App'
 import { Badge } from './ui'
 
@@ -48,6 +49,25 @@ export default function MatchingScreen({
         <button type="button" className="btn btn--ghost" onClick={onReset} disabled={!plan}>
           Сбросить
         </button>
+        {plan !== null && (
+          <>
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={() =>
+                downloadCsv(
+                  planCsvFilename(),
+                  transfersToCsv({ transfers: plan.transfers, confirmed, products, stores, recipients }),
+                )
+              }
+            >
+              ⬇ Скачать CSV
+            </button>
+            <button type="button" className="btn btn--ghost" onClick={() => window.print()}>
+              🖨 Печать
+            </button>
+          </>
+        )}
       </div>
 
       {plan === null ? (
