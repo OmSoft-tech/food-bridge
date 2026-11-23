@@ -14,6 +14,8 @@ export type HistoryAction =
   | 'calc-preset' // подставлен пример набора
   | 'refill' // дефицит из непокрытых нужд отправлен в калькулятор
   | 'report' // сформирован/скачан отчёт для Фонда
+  | 'request-add' // оператор добавил ручную заявку пункта помощи
+  | 'request-remove' // оператор удалил ручную заявку
 
 export interface HistoryEntry {
   ts: number
@@ -43,6 +45,8 @@ export const JOURNAL_ACTIONS: { id: HistoryAction; label: string }[] = [
   { id: 'calc-preset', label: 'Пример набора' },
   { id: 'refill', label: 'Докупка дефицита' },
   { id: 'report', label: 'Отчёт для Фонда' },
+  { id: 'request-add', label: 'Добавление заявки' },
+  { id: 'request-remove', label: 'Удаление заявки' },
 ]
 
 export const HISTORY_KEY = 'food-bridge.history.v1'

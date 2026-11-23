@@ -46,8 +46,9 @@ export function computeUncovered(
   let coveredKg = 0
   for (const t of plan.transfers) {
     for (const item of t.items) {
-      const key = `${t.recipientId}|${item.productId}`
-      allocated.set(key, (allocated.get(key) ?? 0) + item.qty)
+      // учёт по нужде: ручные заявки и мок-нужды одного пункта/товара
+      // не должны перемешивать распределение
+      allocated.set(item.needId, (allocated.get(item.needId) ?? 0) + item.qty)
       coveredKg += item.qty * (byId.get(item.productId)?.unitWeightKg ?? 0)
     }
   }
@@ -64,7 +65,7 @@ export function computeUncovered(
     if (!product) continue
     const open = Math.max(0, n.desiredQty - n.fulfilledQty)
     openKg += open * product.unitWeightKg
-    const allocatedQty = allocated.get(`${n.recipientId}|${n.productId}`) ?? 0
+    const allocatedQty = allocated.get(n.id) ?? 0
     const remaining = open - allocatedQty
     if (remaining <= 0) continue
     const remainingKg = remaining * product.unitWeightKg

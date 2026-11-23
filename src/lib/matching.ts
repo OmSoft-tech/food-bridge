@@ -7,6 +7,8 @@ export interface TransferItem {
   productId: string
   /** сколько единиц излишка уходит в передачу */
   qty: number
+  /** какая нужда закрывается этой позицией (мок n…, ручная заявка req-…) */
+  needId: string
 }
 
 export type TransferStatus = 'planned' | 'confirmed'
@@ -175,7 +177,12 @@ export function buildMatchPlan(
       leftBySurplus.set(s.id, left - take)
       usedByDay.set(day, used + take * unitWeight)
       want -= take
-      push(s.storeId, need.recipientId, { surplusId: s.id, productId: s.productId, qty: take })
+      push(s.storeId, need.recipientId, {
+        surplusId: s.id,
+        productId: s.productId,
+        qty: take,
+        needId: need.id,
+      })
     }
   }
 

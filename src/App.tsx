@@ -6,6 +6,14 @@ import { mergeRefillItems, type BasketItem } from './lib/basket'
 import { formatKg, formatMoney } from './lib/format'
 import { planPickupSchedule } from './lib/schedule'
 import { loadJournal, HISTORY_KEY, HISTORY_LIMIT, type HistoryAction, type HistoryEntry } from './lib/journal'
+import {
+  dedupeRequests,
+  loadRequests,
+  nextRequestId,
+  saveRequests,
+  type OperatorRequest,
+  type RequestDraft,
+} from './lib/requests'
 import Dashboard from './components/Dashboard'
 import SurplusScreen from './components/SurplusScreen'
 import NeedsScreen from './components/NeedsScreen'
@@ -100,15 +108,19 @@ export default function App() {
   // детерминированы) или если открыли демо-ссылку run=demo (мэтчинг/карта).
   const [plan, setPlan] = useState<MatchPlan | null>(() => {
     if ((launch.runDemo && (launch.tab === 'matching' || launch.tab === 'map')) || confirmedIds.size > 0) {
-      return buildMatchPlan(products, surpluses, needs)
+      return buildMatchPlan(products, surpluses, [...needs, ...loadRequests()])
     }
     return null
   })
   const [history, setHistory] = useState<HistoryEntry[]>(loadJournal)
+  // Ручные заявки пунктов помощи — участвуют в мэтчинге как доп. нужды.
+  const [requests, setRequests] = useState<OperatorRequest[]>(loadRequests)
+  /** Все нужды для алгоритмов: моки + ручные заявки оператора. */
+  const allNeeds = useMemo(() => [...needs, ...requests], [requests])
   // Непокрытые нужды и стоимость докупки — пересчитываются вместе с планом.
   const uncovered = useMemo(
-    () => (plan ? computeUncovered(products, needs, plan) : null),
-    [plan],
+    () => (plan ? computeUncovered(products, allNeeds, plan) : null),
+    [plan, allNeeds],
   )
   // План вывозов на неделю: дни по срокам годности + маршруты по расстоянию.
   const schedule = useMemo(
@@ -132,6 +144,11 @@ export default function App() {
     }
   }, [history])
 
+  useEffect(() => {
+    saveRequests(requests)
+  }, [requests])
+
+  const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [])
   const storeById = useMemo(() => new Map(stores.map((s) => [s.id, s])), [])
   const recipientById = useMemo(() => new Map(recipients.map((r) => [r.id, r])), [])
 
@@ -142,8 +159,50 @@ export default function App() {
     [],
   )
 
+  const priorityLabel = (p: OperatorRequest['priority']): string => (p === 'high' ? 'высокий' : 'средний')
+
+  /** Добавление ручной заявки (форма уже валидирована). */
+  const handleAddRequest = useCallback(
+    (draft: RequestDraft) => {
+      const id = nextRequestId(requests)
+      const request: OperatorRequest = {
+        id,
+        recipientId: draft.recipientId,
+        productId: draft.productId,
+        desiredQty: draft.qty,
+        fulfilledQty: 0,
+        priority: draft.priority,
+        createdAt: Date.now(),
+      }
+      setRequests((prev) => dedupeRequests([...prev, request]))
+      const product = productById.get(draft.productId)
+      const recipient = recipientById.get(draft.recipientId)
+      logHistory(
+        'request-add',
+        `добавлена заявка: ${product?.name ?? draft.productId} × ${draft.qty} ${product?.unit ?? ''} для ${recipient?.name ?? draft.recipientId} (приоритет ${priorityLabel(draft.priority)})`,
+      )
+    },
+    [requests, productById, recipientById, logHistory],
+  )
+
+  const handleRemoveRequest = useCallback(
+    (id: string) => {
+      const request = requests.find((r) => r.id === id)
+      setRequests((prev) => prev.filter((r) => r.id !== id))
+      if (request) {
+        const product = productById.get(request.productId)
+        const recipient = recipientById.get(request.recipientId)
+        logHistory(
+          'request-remove',
+          `удалена заявка: ${product?.name ?? request.productId} × ${request.desiredQty} ${product?.unit ?? ''} для ${recipient?.name ?? request.recipientId}`,
+        )
+      }
+    },
+    [requests, productById, recipientById, logHistory],
+  )
+
   const handleBuild = () => {
-    const next = buildMatchPlan(products, surpluses, needs)
+    const next = buildMatchPlan(products, surpluses, allNeeds)
     setPlan(next)
     logHistory('build', `построен план: ${next.transfers.length} передач, ${formatKg(next.totalKg)}`)
   }
@@ -239,7 +298,15 @@ export default function App() {
       <main className="main">
         {tab === 'dashboard' && <Dashboard plan={plan} confirmed={confirmedIds} uncovered={uncovered} />}
         {tab === 'surpluses' && <SurplusScreen />}
-        {tab === 'needs' && <NeedsScreen plan={plan} confirmed={confirmedIds} />}
+        {tab === 'needs' && (
+          <NeedsScreen
+            plan={plan}
+            confirmed={confirmedIds}
+            requests={requests}
+            onAddRequest={handleAddRequest}
+            onRemoveRequest={handleRemoveRequest}
+          />
+        )}
         {tab === 'matching' && (
           <MatchingScreen
             plan={plan}

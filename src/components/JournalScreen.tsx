@@ -22,6 +22,8 @@ const TONE_BY_ACTION: Record<HistoryAction, BadgeTone> = {
   'calc-preset': 'gray',
   refill: 'green',
   report: 'blue',
+  'request-add': 'green',
+  'request-remove': 'amber',
 }
 
 export default function JournalScreen({
