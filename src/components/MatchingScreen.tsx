@@ -14,9 +14,11 @@ import {
   STRATEGIES,
   type ScenarioParams,
 } from '../lib/scenario'
-import { downloadCsv, planCsvFilename, transfersToCsv } from '../lib/csv'
+import { downloadCsv, downloadTextFile, planCsvFilename, transfersToCsv } from '../lib/csv'
+import { buildReportHtml, reportFilename, type ReportData } from '../lib/report'
 import { Badge } from './ui'
 import UncoveredNeeds from './UncoveredNeeds'
+import CoordinatorReport from './CoordinatorReport'
 import PickupSchedule from './PickupSchedule'
 
 interface Props {
@@ -94,6 +96,32 @@ export default function MatchingScreen({
   )
   const displayed = scenarioPlan ?? plan
 
+  // Данные отчёта для координатора — по отображаемому (сценарному) плану.
+  const reportData: ReportData | null = useMemo(() => {
+    if (displayed === null) return null
+    const scenarioLabel = isBaseScenario(scenario)
+      ? 'базовый — сроки годности, без лимита'
+      : `${
+          STRATEGIES.find((s) => s.id === scenario.strategy)?.label ?? scenario.strategy
+        }${scenario.dailyLimitKg > 0 ? ` · лимит вывоза ${scenario.dailyLimitKg} кг/день` : ''}`
+    return {
+      plan: displayed,
+      confirmed: scenarioActive ? new Set() : confirmed,
+      scenarioLabel,
+      schedule: scenarioSchedule ?? [],
+      uncovered:
+        scenarioUncovered ??
+        computeUncovered(products, needs, displayed),
+      history,
+      products,
+      storeNames: new Map(stores.map((s) => [s.id, `${s.name} (${s.address})`])),
+      recipientNames: new Map(recipients.map((r) => [r.id, `${r.name} (${r.address})`])),
+      productNames: new Map(products.map((p) => [p.id, p.name])),
+    }
+  }, [displayed, scenario, scenarioActive, confirmed, scenarioSchedule, scenarioUncovered, history])
+
+  const [reportPrintMode, setReportPrintMode] = useState(false)
+
   return (
     <section>
       <h1 className="section-title">Мэтчинг передач</h1>
@@ -110,7 +138,7 @@ export default function MatchingScreen({
         <button type="button" className="btn btn--ghost" onClick={onReset} disabled={!plan}>
           Сбросить
         </button>
-        {plan !== null && (
+        {displayed !== null && (
           <>
             <button
               type="button"
@@ -136,8 +164,36 @@ export default function MatchingScreen({
             >
               ⬇ Скачать CSV
             </button>
-            <button type="button" className="btn btn--ghost" onClick={() => window.print()}>
-              🖨 Печать
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => {
+                setReportPrintMode(true)
+                onLog(
+                  'report',
+                  `сформирован печатный отчёт для Фонда (${displayed.transfers.length} передач, ${formatKg(displayed.totalKg)})`,
+                )
+              }}
+            >
+              🖨 Отчёт для Фонда
+            </button>
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={() => {
+                if (reportData === null) return
+                downloadTextFile(
+                  reportFilename(),
+                  buildReportHtml(reportData),
+                  'text/html;charset=utf-8',
+                )
+                onLog(
+                  'report',
+                  `скачан HTML-отчёт для Фонда (${displayed.transfers.length} передач, ${formatKg(displayed.totalKg)})`,
+                )
+              }}
+            >
+              ⬇ Скачать HTML отчёт
             </button>
           </>
         )}
@@ -295,6 +351,11 @@ export default function MatchingScreen({
             />
           )}
         </>
+      )}
+
+      {/* Отчёт для координатора: скрытый iframe-контейнер, печать по флагу */}
+      {reportData && (
+        <CoordinatorReport data={reportData} print={reportPrintMode} onPrinted={() => setReportPrintMode(false)} />
       )}
 
       {history.length > 0 && (

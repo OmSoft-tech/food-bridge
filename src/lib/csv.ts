@@ -130,9 +130,9 @@ export function transfersToCsv({
   return '\uFEFF' + lines.join('\r\n')
 }
 
-/** Триггерит скачивание файла в браузере. */
-export function downloadCsv(filename: string, content: string): void {
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' })
+/** Триггерит скачивание файла в браузере (общий для CSV/HTML отчёта). */
+export function downloadTextFile(filename: string, content: string, mime: string): void {
+  const blob = new Blob([content], { type: mime })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -141,6 +141,11 @@ export function downloadCsv(filename: string, content: string): void {
   a.click()
   a.remove()
   URL.revokeObjectURL(url)
+}
+
+/** Скачивание CSV плана передач. */
+export function downloadCsv(filename: string, content: string): void {
+  downloadTextFile(filename, content, 'text/csv;charset=utf-8')
 }
 
 export function planCsvFilename(now = new Date()): string {
