@@ -3,6 +3,7 @@ import { products } from '../data'
 import { CATEGORIES, CATEGORY_LABEL, KCAL_PER_KG, NORM_KG_PER_PERSON_DAY } from '../lib/nutrition'
 import { computeBasket, basketsForBudget, type BasketItem } from '../lib/basket'
 import { formatCoverage, formatKcal, formatKg, formatMoney, formatNumber } from '../lib/format'
+import type { HistoryAction } from '../lib/journal'
 
 /** Условный «средний набор» — быстрый старт для демо и жюри. Экспортируется для тестов. */
 export const PRESET: BasketItem[] = [
@@ -21,7 +22,13 @@ const PRESET_BUDGET = '20000'
  * initialDemo=true (deep-link ?tab=calc&run=demo) — открывается сразу
  * с примером набора в бюджете, как после кнопки «Пример набора».
  */
-export default function CalculatorScreen({ initialDemo = false }: { initialDemo?: boolean }) {
+export default function CalculatorScreen({
+  initialDemo = false,
+  onLog,
+}: {
+  initialDemo?: boolean
+  onLog?: (action: HistoryAction, label: string) => void
+}) {
   const [items, setItems] = useState<BasketItem[]>(() =>
     initialDemo ? PRESET.map((p) => ({ ...p })) : [],
   )
@@ -34,6 +41,7 @@ export default function CalculatorScreen({ initialDemo = false }: { initialDemo?
   const add = () => {
     const n = Number(qty.replace(',', '.'))
     if (!Number.isFinite(n) || n <= 0) return
+    const product = productById.get(productId)
     setItems((prev) => {
       const existing = prev.find((i) => i.productId === productId)
       if (existing) {
@@ -41,9 +49,19 @@ export default function CalculatorScreen({ initialDemo = false }: { initialDemo?
       }
       return [...prev, { productId, qty: n }]
     })
+    onLog?.(
+      'calc-add',
+      product
+        ? `добавлен товар: ${product.name} × ${n} ${product.unit}`
+        : `добавлен товар: ${productId} × ${n}`,
+    )
   }
 
-  const remove = (id: string) => setItems((prev) => prev.filter((i) => i.productId !== id))
+  const remove = (id: string) => {
+    const product = productById.get(id)
+    setItems((prev) => prev.filter((i) => i.productId !== id))
+    if (product) onLog?.('calc-remove', `убран товар: ${product.name}`)
+  }
 
   const { totalKg, totalKcal, totalCost, personDays, kgByCategory } = computeBasket(products, items)
 
@@ -113,6 +131,7 @@ export default function CalculatorScreen({ initialDemo = false }: { initialDemo?
           onClick={() => {
             setItems(PRESET.map((p) => ({ ...p })))
             setBudget(PRESET_BUDGET)
+            onLog?.('calc-preset', `подставлен пример набора (${PRESET.length} позиций, бюджет ${formatMoney(Number(PRESET_BUDGET))})`)
           }}
         >
           Пример набора
@@ -120,7 +139,10 @@ export default function CalculatorScreen({ initialDemo = false }: { initialDemo?
         <button
           type="button"
           className="btn btn--ghost"
-          onClick={() => setItems([])}
+          onClick={() => {
+            setItems([])
+            onLog?.('calc-clear', `набор очищен (${items.length} позиций было)`)
+          }}
           disabled={items.length === 0}
         >
           Очистить

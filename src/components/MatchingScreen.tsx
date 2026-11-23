@@ -1,8 +1,8 @@
 import { products, recipients, stores } from '../data'
 import { formatCoverage, formatKg, formatTime } from '../lib/format'
 import type { MatchPlan, Transfer } from '../lib/matching'
+import type { HistoryAction, HistoryEntry } from '../lib/journal'
 import { downloadCsv, planCsvFilename, transfersToCsv } from '../lib/csv'
-import type { HistoryEntry } from '../App'
 import { Badge } from './ui'
 
 interface Props {
@@ -12,7 +12,7 @@ interface Props {
   onBuild: () => void
   onReset: () => void
   onConfirm: (transferId: string) => void
-  onClearHistory: () => void
+  onLog: (action: HistoryAction, label: string) => void
 }
 
 const STATUS_BADGE: Record<Transfer['status'], { tone: 'amber' | 'green'; label: string }> = {
@@ -27,7 +27,7 @@ export default function MatchingScreen({
   onBuild,
   onReset,
   onConfirm,
-  onClearHistory,
+  onLog,
 }: Props) {
   const storeById = new Map(stores.map((s) => [s.id, s]))
   const recipientById = new Map(recipients.map((r) => [r.id, r]))
@@ -54,12 +54,16 @@ export default function MatchingScreen({
             <button
               type="button"
               className="btn btn--ghost"
-              onClick={() =>
+              onClick={() => {
                 downloadCsv(
                   planCsvFilename(),
                   transfersToCsv({ transfers: plan.transfers, confirmed, products, stores, recipients }),
                 )
-              }
+                onLog(
+                  'export',
+                  `план передач экспортирован в CSV (${plan.transfers.length} передач, ${formatKg(plan.totalKg)})`,
+                )
+              }}
             >
               ⬇ Скачать CSV
             </button>
@@ -146,11 +150,11 @@ export default function MatchingScreen({
       {history.length > 0 && (
         <div className="breakdown">
           <h2 className="section-title" style={{ fontSize: 16 }}>
-            История действий
+            Последние действия
           </h2>
           <ul className="list">
             {history
-              .slice()
+              .slice(-5)
               .reverse()
               .map((h, i) => (
                 <li className="list__item" key={`${h.ts}-${i}`}>
@@ -159,14 +163,13 @@ export default function MatchingScreen({
                 </li>
               ))}
           </ul>
-          <button
-            type="button"
+          <a
             className="btn btn--small btn--ghost"
             style={{ marginTop: 10 }}
-            onClick={onClearHistory}
+            href="?tab=journal"
           >
-            Очистить историю
-          </button>
+            Весь журнал →
+          </a>
         </div>
       )}
     </section>

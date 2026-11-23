@@ -1,5 +1,19 @@
 import type { Product, Recipient, Store } from '../types'
 import type { Transfer } from './matching'
+import { actionLabel, type HistoryEntry } from './journal'
+
+const CSV_SEP = ';'
+
+/** Значение CSV: экранирование «;», кавычек и переносов строк. */
+export function csvField(value: string | number): string {
+  const s = String(value)
+  return /[;"\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+
+/** Строка CSV из значений. */
+export function csvRow(cells: (string | number)[]): string {
+  return cells.map(csvField).join(CSV_SEP)
+}
 
 /**
  * CSV плана передач: строка на позицию передачи + итог по передаче.
@@ -19,16 +33,11 @@ export function transfersToCsv({
   stores: Store[]
   recipients: Recipient[]
 }): string {
-  const sep = ';'
   const productById = new Map(products.map((p) => [p.id, p]))
   const storeById = new Map(stores.map((s) => [s.id, s]))
   const recipientById = new Map(recipients.map((r) => [r.id, r]))
 
-  const field = (value: string | number): string => {
-    const s = String(value)
-    return /[;"\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-  }
-  const row = (cells: (string | number)[]): string => cells.map(field).join(sep)
+  const row = csvRow
 
   const lines = [
     row([
@@ -92,4 +101,30 @@ export function downloadCsv(filename: string, content: string): void {
 export function planCsvFilename(now = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, '0')
   return `food-bridge-plan-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.csv`
+}
+
+/** CSV журнала действий: время, тип, событие — как на экране. */
+export function journalToCsv(entries: HistoryEntry[]): string {
+  const lines = [csvRow(['Время', 'Тип действия', 'Событие'])]
+  for (const e of entries) {
+    lines.push(
+      csvRow([
+        new Date(e.ts).toLocaleString('ru-RU', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        actionLabel(e.action),
+        e.label,
+      ]),
+    )
+  }
+  return '\uFEFF' + lines.join('\r\n')
+}
+
+export function journalCsvFilename(now = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `food-bridge-journal-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.csv`
 }

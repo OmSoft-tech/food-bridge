@@ -2,14 +2,16 @@ import { useEffect, useState } from 'react'
 import { needs, products, recipients, stores, surpluses } from './data'
 import { buildMatchPlan, type MatchPlan } from './lib/matching'
 import { formatKg } from './lib/format'
+import { loadJournal, type HistoryAction, type HistoryEntry } from './lib/journal'
 import Dashboard from './components/Dashboard'
 import SurplusScreen from './components/SurplusScreen'
 import NeedsScreen from './components/NeedsScreen'
 import MatchingScreen from './components/MatchingScreen'
-import MapScreen from './components/MapScreen'
 import CalculatorScreen from './components/CalculatorScreen'
+import JournalScreen from './components/JournalScreen'
+import MapScreen from './components/MapScreen'
 
-export type TabId = 'dashboard' | 'surpluses' | 'needs' | 'matching' | 'calc' | 'map'
+export type TabId = 'dashboard' | 'surpluses' | 'needs' | 'matching' | 'calc' | 'journal' | 'map'
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Дашборд', icon: '📊' },
@@ -17,6 +19,7 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'needs', label: 'Нужды', icon: '🤝' },
   { id: 'matching', label: 'Мэтчинг', icon: '🔁' },
   { id: 'calc', label: 'Калькулятор', icon: '🧮' },
+  { id: 'journal', label: 'Журнал', icon: '📜' },
   { id: 'map', label: 'Карта', icon: '🗺️' },
 ]
 
@@ -28,9 +31,9 @@ interface LaunchParams {
 }
 
 /**
- * Разбор deep-link параметров: ?tab=dashboard|surpluses|needs|matching|calc
- * и &run=demo (на мэтчинге сразу строит план, на калькуляторе подставляет
- * пример набора). Старые #hash-ссылки тоже понимаем.
+ * Разбор deep-link параметров: ?tab=… и &run=demo (на мэтчинге сразу строит
+ * план, на калькуляторе подставляет пример набора, на карте открывает с
+ * готовым планом). Старые #hash-ссылки тоже понимаем.
  */
 function parseLaunchParams(): LaunchParams {
   const sp = new URLSearchParams(window.location.search)
@@ -69,21 +72,12 @@ function useTabFromUrl(): [TabId, (t: TabId) => void] {
   return [tab, select]
 }
 
-/* ── Подтверждения и история: localStorage ─────────────────────────── */
+/* ── Подтверждения и журнал: localStorage ──────────────────────────── */
 
 const CONFIRMED_KEY = 'food-bridge.confirmed.v1'
 const HISTORY_KEY = 'food-bridge.history.v1'
-const HISTORY_LIMIT = 50
-
-export type HistoryAction = 'build' | 'confirm' | 'reset'
-
-export interface HistoryEntry {
-  ts: number
-  action: HistoryAction
-  label: string
-}
-
-const HISTORY_ACTIONS: HistoryAction[] = ['build', 'confirm', 'reset']
+/** Лимит журнала: полноценный журнал оператора, не только последние действия. */
+const HISTORY_LIMIT = 200
 
 function loadConfirmed(): Set<string> {
   try {
@@ -95,26 +89,6 @@ function loadConfirmed(): Set<string> {
     return new Set(ids)
   } catch {
     return new Set()
-  }
-}
-
-function loadHistory(): HistoryEntry[] {
-  try {
-    const raw = window.localStorage.getItem(HISTORY_KEY)
-    const parsed: unknown = raw ? JSON.parse(raw) : []
-    if (!Array.isArray(parsed)) return []
-    return parsed
-      .filter(
-        (e): e is HistoryEntry =>
-          typeof e === 'object' &&
-          e !== null &&
-          typeof (e as HistoryEntry).ts === 'number' &&
-          typeof (e as HistoryEntry).label === 'string' &&
-          HISTORY_ACTIONS.includes((e as HistoryEntry).action),
-      )
-      .slice(-HISTORY_LIMIT)
-  } catch {
-    return []
   }
 }
 
@@ -130,7 +104,7 @@ export default function App() {
     }
     return null
   })
-  const [history, setHistory] = useState<HistoryEntry[]>(loadHistory)
+  const [history, setHistory] = useState<HistoryEntry[]>(loadJournal)
 
   useEffect(() => {
     try {
@@ -151,6 +125,7 @@ export default function App() {
   const storeById = new Map(stores.map((s) => [s.id, s]))
   const recipientById = new Map(recipients.map((r) => [r.id, r]))
 
+  /** Запись значимого действия оператора в журнал. */
   const logHistory = (action: HistoryAction, label: string) =>
     setHistory((prev) => [...prev, { ts: Date.now(), action, label }].slice(-HISTORY_LIMIT))
 
@@ -218,10 +193,21 @@ export default function App() {
             onBuild={handleBuild}
             onReset={handleReset}
             onConfirm={handleConfirm}
+            onLog={logHistory}
+          />
+        )}
+        {tab === 'calc' && (
+          <CalculatorScreen
+            initialDemo={launch.runDemo && launch.tab === 'calc'}
+            onLog={logHistory}
+          />
+        )}
+        {tab === 'journal' && (
+          <JournalScreen
+            history={history}
             onClearHistory={handleClearHistory}
           />
         )}
-        {tab === 'calc' && <CalculatorScreen initialDemo={launch.runDemo && launch.tab === 'calc'} />}
         {tab === 'map' && <MapScreen plan={plan} confirmed={confirmedIds} />}
       </main>
 
