@@ -16,6 +16,29 @@ export function formatMoney(rub: number): string {
   return `${formatNumber(rub)} ₽`
 }
 
+/** «23 ноя, 15:12» — для истории действий. */
+export function formatTime(ts: number): string {
+  return new Date(ts).toLocaleString('ru-RU', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+const ESCAPE_MAP: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+}
+
+/** Экранирование для вставки в HTML-попапы карты. */
+export function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ESCAPE_MAP[c] ?? c)
+}
+
 const dayMs = 86_400_000
 
 /** Дата истечения срока годности излишка. */

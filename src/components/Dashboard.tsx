@@ -2,11 +2,20 @@ import { surpluses, needs, products } from '../data'
 import { computeDashboardStats, type CategoryStat } from '../lib/stats'
 import { formatCoverage, formatKg, formatNumber } from '../lib/format'
 import { CATEGORY_LABEL, kgToPersonDays } from '../lib/nutrition'
+import type { MatchPlan } from '../lib/matching'
 import { Bar, StatTile } from './ui'
 
-export default function Dashboard() {
+export default function Dashboard({
+  plan,
+  confirmed,
+}: {
+  plan: MatchPlan | null
+  confirmed: Set<string>
+}) {
   const stats = computeDashboardStats(products, surpluses, needs)
   const maxKg = Math.max(1, ...stats.categories.map((c) => c.availableKg))
+  const confirmedTransfers = plan ? plan.transfers.filter((t) => confirmed.has(t.id)) : []
+  const confirmedKg = confirmedTransfers.reduce((sum, t) => sum + t.totalKg, 0)
 
   return (
     <section>
@@ -37,6 +46,16 @@ export default function Dashboard() {
           hint="излишки, совпавшие с открытыми нуждами"
         />
       </div>
+
+      {confirmedTransfers.length > 0 && (
+        <p className="note note--green">
+          <span aria-hidden="true">✅</span>
+          <span>
+            Подтверждено передач: {confirmedTransfers.length} — передано {formatKg(confirmedKg)}.
+            Прогресс в «Нуждах» учитывает подтверждённое.
+          </span>
+        </p>
+      )}
 
       {stats.urgentCount > 0 && (
         <p className="note">

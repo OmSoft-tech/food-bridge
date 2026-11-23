@@ -7,8 +7,10 @@ import type { Need, Product, Recipient } from '../types'
 interface NeedRow {
   need: Need
   product: Product
-  /** сколько на эту нужду уходит в текущем плане передач */
-  planQty: number
+  /** единиц на эту нужду в подтверждённых передачах плана */
+  planConfirmed: number
+  /** единиц на эту нужду в незапланированных (ещё не подтверждённых) передачах */
+  planPlanned: number
   /** сколько единиц того же товара сейчас в витрине излишков */
   openQty: number
 }
@@ -18,23 +20,37 @@ interface RecipientCard {
   rows: NeedRow[]
   desiredKg: number
   closedKg: number
+  confirmedKg: number
   plannedKg: number
 }
 
-/** Прогресс нужды: закрыто (mock fulfilledQty) + в плане (текущий план передач). */
-function planQtyFor(plan: MatchPlan | null, need: Need): number {
-  if (!plan) return 0
-  let qty = 0
+/** Прогресс нужды: закрыто (mock fulfilledQty) + подтверждено + в плане (план передач). */
+function planQtyFor(
+  plan: MatchPlan | null,
+  need: Need,
+  confirmed: Set<string>,
+): { confirmedQty: number; plannedQty: number } {
+  if (!plan) return { confirmedQty: 0, plannedQty: 0 }
+  let confirmedQty = 0
+  let plannedQty = 0
   for (const t of plan.transfers) {
     if (t.recipientId !== need.recipientId) continue
     for (const item of t.items) {
-      if (item.productId === need.productId) qty += item.qty
+      if (item.productId !== need.productId) continue
+      if (confirmed.has(t.id)) confirmedQty += item.qty
+      else plannedQty += item.qty
     }
   }
-  return qty
+  return { confirmedQty, plannedQty }
 }
 
-export default function NeedsScreen({ plan }: { plan: MatchPlan | null }) {
+export default function NeedsScreen({
+  plan,
+  confirmed,
+}: {
+  plan: MatchPlan | null
+  confirmed: Set<string>
+}) {
   const productById = new Map(products.map((p) => [p.id, p]))
   const openQtyByProduct = new Map<string, number>()
   for (const s of surpluses) {
@@ -49,32 +65,37 @@ export default function NeedsScreen({ plan }: { plan: MatchPlan | null }) {
       .flatMap((n) => {
         const product = productById.get(n.productId)
         if (!product) return []
+        const { confirmedQty, plannedQty } = planQtyFor(plan, n, confirmed)
         const row: NeedRow = {
           need: n,
           product,
-          planQty: planQtyFor(plan, n),
+          planConfirmed: confirmedQty,
+          planPlanned: plannedQty,
           openQty: openQtyByProduct.get(n.productId) ?? 0,
         }
         return [row]
       })
-    const closedKg = rows.reduce((sum, r) => sum + r.need.fulfilledQty * r.product.unitWeightKg, 0)
-    const plannedKg = rows.reduce((sum, r) => sum + r.planQty * r.product.unitWeightKg, 0)
-    const desiredKg = rows.reduce((sum, r) => sum + r.need.desiredQty * r.product.unitWeightKg, 0)
-    return { recipient: r, rows, desiredKg, closedKg, plannedKg }
+    const kg = (qty: (row: NeedRow) => number) =>
+      rows.reduce((sum, row) => sum + qty(row) * row.product.unitWeightKg, 0)
+    const closedKg = kg((row) => row.need.fulfilledQty)
+    const confirmedKg = kg((row) => row.planConfirmed)
+    const plannedKg = kg((row) => row.planPlanned)
+    const desiredKg = kg((row) => row.need.desiredQty)
+    return { recipient: r, rows, desiredKg, closedKg, confirmedKg, plannedKg }
   })
 
   return (
     <section>
       <h1 className="section-title">Нужды пунктов помощи</h1>
       <p className="section-sub">
-        Прогресс закрытия потребности: сплошная зелень — уже получено, штриховка — уходит в текущем
-        плане передач (вкладка «Мэтчинг»).
+        Прогресс закрытия потребности: тёмно-зелёная — уже получено, ярко-зелёная — подтверждённая
+        передача, штриховка — ещё в плане (вкладка «Мэтчинг»).
       </p>
 
       <div className="cards">
         {cards.map((card) => {
-          const pct =
-            card.desiredKg > 0 ? ((card.closedKg + card.plannedKg) / card.desiredKg) * 100 : 0
+          const total =
+            (card.closedKg + card.confirmedKg + card.plannedKg) / (card.desiredKg || 1)
           return (
             <article className="card" key={card.recipient.id}>
               <div>
@@ -88,14 +109,15 @@ export default function NeedsScreen({ plan }: { plan: MatchPlan | null }) {
                 <Bar
                   segments={[
                     { value: card.closedKg / card.desiredKg, tone: 'done' },
+                    { value: card.confirmedKg / card.desiredKg, tone: 'confirmed' },
                     { value: card.plannedKg / card.desiredKg, tone: 'planned' },
                   ]}
                 />
-                <span className="progress-label">{Math.round(pct)}%</span>
+                <span className="progress-label">{Math.round(total * 100)}%</span>
               </div>
 
               <ul className="list">
-                {card.rows.map(({ need, product, planQty, openQty }) => (
+                {card.rows.map(({ need, product, planConfirmed, planPlanned, openQty }) => (
                   <li className="list__item" key={need.id}>
                     <span>
                       {product.name}
@@ -105,10 +127,16 @@ export default function NeedsScreen({ plan }: { plan: MatchPlan | null }) {
                           <Badge tone="red">{PRIORITY_LABEL[need.priority]} приоритет</Badge>
                         </>
                       )}
-                      {planQty > 0 && (
+                      {planConfirmed > 0 && (
                         <>
                           {' '}
-                          <Badge tone="green">+{planQty} в плане</Badge>
+                          <Badge tone="green">+{planConfirmed} подтверждено</Badge>
+                        </>
+                      )}
+                      {planPlanned > 0 && (
+                        <>
+                          {' '}
+                          <Badge>+{planPlanned} в плане</Badge>
                         </>
                       )}
                     </span>

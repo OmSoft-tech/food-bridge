@@ -29,7 +29,7 @@ export function Bar({
   segments,
   height = 8,
 }: {
-  segments: { value: number; tone: 'done' | 'planned' }[]
+  segments: { value: number; tone: 'done' | 'confirmed' | 'planned' }[]
   height?: number
 }) {
   return (

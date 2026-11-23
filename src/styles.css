@@ -282,6 +282,10 @@ body {
 }
 
 .bar__seg--done {
+  background: var(--green-strong);
+}
+
+.bar__seg--confirmed {
   background: var(--green);
 }
 
@@ -404,6 +408,12 @@ body {
   font-size: 13px;
   color: var(--amber);
   margin: 0 0 14px;
+}
+
+.note--green {
+  background: var(--green-soft);
+  border-color: rgba(70, 208, 124, 0.3);
+  color: var(--green);
 }
 
 .empty {

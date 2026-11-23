@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { needs, products, surpluses } from './data'
+import { needs, products, recipients, stores, surpluses } from './data'
 import { buildMatchPlan, type MatchPlan } from './lib/matching'
+import { formatKg } from './lib/format'
 import Dashboard from './components/Dashboard'
 import SurplusScreen from './components/SurplusScreen'
 import NeedsScreen from './components/NeedsScreen'
@@ -59,26 +60,113 @@ function useTabFromUrl(): [TabId, (t: TabId) => void] {
   return [tab, select]
 }
 
+/* ── Подтверждения и история: localStorage ─────────────────────────── */
+
+const CONFIRMED_KEY = 'food-bridge.confirmed.v1'
+const HISTORY_KEY = 'food-bridge.history.v1'
+const HISTORY_LIMIT = 50
+
+export type HistoryAction = 'build' | 'confirm' | 'reset'
+
+export interface HistoryEntry {
+  ts: number
+  action: HistoryAction
+  label: string
+}
+
+const HISTORY_ACTIONS: HistoryAction[] = ['build', 'confirm', 'reset']
+
+function loadConfirmed(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(CONFIRMED_KEY)
+    const parsed: unknown = raw ? JSON.parse(raw) : []
+    const ids = Array.isArray(parsed)
+      ? parsed.filter((x): x is string => typeof x === 'string')
+      : []
+    return new Set(ids)
+  } catch {
+    return new Set()
+  }
+}
+
+function loadHistory(): HistoryEntry[] {
+  try {
+    const raw = window.localStorage.getItem(HISTORY_KEY)
+    const parsed: unknown = raw ? JSON.parse(raw) : []
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter(
+        (e): e is HistoryEntry =>
+          typeof e === 'object' &&
+          e !== null &&
+          typeof (e as HistoryEntry).ts === 'number' &&
+          typeof (e as HistoryEntry).label === 'string' &&
+          HISTORY_ACTIONS.includes((e as HistoryEntry).action),
+      )
+      .slice(-HISTORY_LIMIT)
+  } catch {
+    return []
+  }
+}
+
 export default function App() {
   const [launch] = useState(parseLaunchParams) // параметры запуска — один раз на загрузку
   const [tab, selectTab] = useTabFromUrl()
-  const [plan, setPlan] = useState<MatchPlan | null>(() =>
-    launch.runDemo && launch.tab === 'matching' ? buildMatchPlan(products, surpluses, needs) : null,
-  )
+  const [confirmedIds, setConfirmedIds] = useState<Set<string>>(loadConfirmed)
+  // План строится на старте, если есть подтверждения в localStorage (id передач
+  // детерминированы) или если открыли демо-ссылку run=demo на мэтчинге.
+  const [plan, setPlan] = useState<MatchPlan | null>(() => {
+    if ((launch.runDemo && launch.tab === 'matching') || confirmedIds.size > 0) {
+      return buildMatchPlan(products, surpluses, needs)
+    }
+    return null
+  })
+  const [history, setHistory] = useState<HistoryEntry[]>(loadHistory)
 
-  const handleBuild = () => setPlan(buildMatchPlan(products, surpluses, needs))
-  const handleReset = () => setPlan(null)
-  const handleConfirm = (transferId: string) =>
-    setPlan((prev) =>
-      prev
-        ? {
-            ...prev,
-            transfers: prev.transfers.map((t) =>
-              t.id === transferId ? { ...t, status: 'confirmed' as const } : t,
-            ),
-          }
-        : prev,
-    )
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(CONFIRMED_KEY, JSON.stringify([...confirmedIds]))
+    } catch {
+      /* приватный режим — подтверждения живут только в сессии */
+    }
+  }, [confirmedIds])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(HISTORY_KEY, JSON.stringify(history))
+    } catch {
+      /* см. выше */
+    }
+  }, [history])
+
+  const storeById = new Map(stores.map((s) => [s.id, s]))
+  const recipientById = new Map(recipients.map((r) => [r.id, r]))
+
+  const logHistory = (action: HistoryAction, label: string) =>
+    setHistory((prev) => [...prev, { ts: Date.now(), action, label }].slice(-HISTORY_LIMIT))
+
+  const handleBuild = () => {
+    const next = buildMatchPlan(products, surpluses, needs)
+    setPlan(next)
+    logHistory('build', `построен план: ${next.transfers.length} передач, ${formatKg(next.totalKg)}`)
+  }
+  const handleReset = () => {
+    setPlan(null)
+    logHistory('reset', 'план сброшен')
+  }
+  const handleConfirm = (transferId: string) => {
+    setConfirmedIds((prev) => new Set(prev).add(transferId))
+    const t = plan?.transfers.find((x) => x.id === transferId)
+    if (t) {
+      const store = storeById.get(t.storeId)
+      const recipient = recipientById.get(t.recipientId)
+      logHistory(
+        'confirm',
+        `подтверждена передача #${transferId}: ${store?.name} → ${recipient?.name}, ${formatKg(t.totalKg)}`,
+      )
+    }
+  }
+  const handleClearHistory = () => setHistory([])
 
   return (
     <div className="app">
@@ -110,11 +198,19 @@ export default function App() {
       </header>
 
       <main className="main">
-        {tab === 'dashboard' && <Dashboard />}
+        {tab === 'dashboard' && <Dashboard plan={plan} confirmed={confirmedIds} />}
         {tab === 'surpluses' && <SurplusScreen />}
-        {tab === 'needs' && <NeedsScreen plan={plan} />}
+        {tab === 'needs' && <NeedsScreen plan={plan} confirmed={confirmedIds} />}
         {tab === 'matching' && (
-          <MatchingScreen plan={plan} onBuild={handleBuild} onReset={handleReset} onConfirm={handleConfirm} />
+          <MatchingScreen
+            plan={plan}
+            confirmed={confirmedIds}
+            history={history}
+            onBuild={handleBuild}
+            onReset={handleReset}
+            onConfirm={handleConfirm}
+            onClearHistory={handleClearHistory}
+          />
         )}
         {tab === 'calc' && <CalculatorScreen initialDemo={launch.runDemo && launch.tab === 'calc'} />}
       </main>
