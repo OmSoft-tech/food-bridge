@@ -22,11 +22,17 @@ const PRESET: CalcItem[] = [
 /** Демо-бюджет для «Пример набора», чтобы сразу показать бюджетные тайлы. */
 const PRESET_BUDGET = '20000'
 
-export default function CalculatorScreen() {
-  const [items, setItems] = useState<CalcItem[]>([])
+/**
+ * initialDemo=true (deep-link ?tab=calc&run=demo) — открывается сразу
+ * с примером набора в бюджете, как после кнопки «Пример набора».
+ */
+export default function CalculatorScreen({ initialDemo = false }: { initialDemo?: boolean }) {
+  const [items, setItems] = useState<CalcItem[]>(() =>
+    initialDemo ? PRESET.map((p) => ({ ...p })) : [],
+  )
   const [productId, setProductId] = useState(products[0].id)
   const [qty, setQty] = useState('10')
-  const [budget, setBudget] = useState('')
+  const [budget, setBudget] = useState(() => (initialDemo ? PRESET_BUDGET : ''))
 
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [])
 

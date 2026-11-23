@@ -7,37 +7,64 @@ import NeedsScreen from './components/NeedsScreen'
 import MatchingScreen from './components/MatchingScreen'
 import CalculatorScreen from './components/CalculatorScreen'
 
-export type TabId = 'dashboard' | 'surplus' | 'needs' | 'matching' | 'calculator'
+export type TabId = 'dashboard' | 'surpluses' | 'needs' | 'matching' | 'calc'
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Дашборд', icon: '📊' },
-  { id: 'surplus', label: 'Излишки', icon: '🛒' },
+  { id: 'surpluses', label: 'Излишки', icon: '🛒' },
   { id: 'needs', label: 'Нужды', icon: '🤝' },
   { id: 'matching', label: 'Мэтчинг', icon: '🔁' },
-  { id: 'calculator', label: 'Калькулятор', icon: '🧮' },
+  { id: 'calc', label: 'Калькулятор', icon: '🧮' },
 ]
 
-function parseHash(fallback: TabId): TabId {
-  const id = window.location.hash.replace('#', '') as TabId
-  return TABS.some((t) => t.id === id) ? id : fallback
+const isTabId = (v: string): v is TabId => TABS.some((t) => t.id === v)
+
+interface LaunchParams {
+  tab: TabId
+  runDemo: boolean
 }
 
-function useHashTab(): [TabId, (t: TabId) => void] {
-  const [tab, setTab] = useState<TabId>(() => parseHash('dashboard'))
+/**
+ * Разбор deep-link параметров: ?tab=dashboard|surpluses|needs|matching|calc
+ * и &run=demo (на мэтчинге сразу строит план, на калькуляторе подставляет
+ * пример набора). Старые #hash-ссылки тоже понимаем.
+ */
+function parseLaunchParams(): LaunchParams {
+  const sp = new URLSearchParams(window.location.search)
+  const raw = sp.get('tab') ?? window.location.hash.replace(/^#/, '')
+  const tab = raw && isTabId(raw) ? raw : 'dashboard'
+  return { tab, runDemo: sp.get('run') === 'demo' && (tab === 'matching' || tab === 'calc') }
+}
+
+/** Вкладка живёт в URL (?tab=…) — ссылки шарябельные, back/forward синхронен. */
+function useTabFromUrl(): [TabId, (t: TabId) => void] {
+  const [tab, setTab] = useState<TabId>(() => parseLaunchParams().tab)
   useEffect(() => {
-    const onHashChange = () => setTab(parseHash('dashboard'))
-    window.addEventListener('hashchange', onHashChange)
-    return () => window.removeEventListener('hashchange', onHashChange)
+    const sync = () => setTab(parseLaunchParams().tab)
+    window.addEventListener('popstate', sync)
+    window.addEventListener('hashchange', sync)
+    return () => {
+      window.removeEventListener('popstate', sync)
+      window.removeEventListener('hashchange', sync)
+    }
   }, [])
   const select = (t: TabId) => {
-    window.location.hash = t
+    setTab(t)
+    const sp = new URLSearchParams(window.location.search)
+    sp.set('tab', t)
+    sp.delete('run') // run=demo — одноразовый параметр запуска
+    const qs = sp.toString()
+    window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`)
   }
   return [tab, select]
 }
 
 export default function App() {
-  const [tab, selectTab] = useHashTab()
-  const [plan, setPlan] = useState<MatchPlan | null>(null)
+  const [launch] = useState(parseLaunchParams) // параметры запуска — один раз на загрузку
+  const [tab, selectTab] = useTabFromUrl()
+  const [plan, setPlan] = useState<MatchPlan | null>(() =>
+    launch.runDemo && launch.tab === 'matching' ? buildMatchPlan(products, surpluses, needs) : null,
+  )
 
   const handleBuild = () => setPlan(buildMatchPlan(products, surpluses, needs))
   const handleReset = () => setPlan(null)
@@ -84,12 +111,12 @@ export default function App() {
 
       <main className="main">
         {tab === 'dashboard' && <Dashboard />}
-        {tab === 'surplus' && <SurplusScreen />}
+        {tab === 'surpluses' && <SurplusScreen />}
         {tab === 'needs' && <NeedsScreen plan={plan} />}
         {tab === 'matching' && (
           <MatchingScreen plan={plan} onBuild={handleBuild} onReset={handleReset} onConfirm={handleConfirm} />
         )}
-        {tab === 'calculator' && <CalculatorScreen />}
+        {tab === 'calc' && <CalculatorScreen initialDemo={launch.runDemo && launch.tab === 'calc'} />}
       </main>
 
       <footer className="footer">
